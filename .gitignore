@@ -1,0 +1,32 @@
+# ===== 密钥与环境（绝不提交） =====
+.env
+.env.local
+*.pem
+id_rsa*
+*.key
+credentials*
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ===== 数据与日志 =====
+*.db
+*.sqlite3
+*.log
+logs/
+data/
+
+# ===== 工具与系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
