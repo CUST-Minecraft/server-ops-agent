@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8
+    container_name: server-agent-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: server_agent
+      MYSQL_USER: agent
+      MYSQL_PASSWORD: agentpass
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:
