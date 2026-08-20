@@ -38,6 +38,7 @@ if __name__ == "__main__":
         },
     }]
     rs = client.chat(message, tools=tools)
+    print(rs)
     msg = rs.choices[0].message
     if rs.choices[0].finish_reason == "tool_calls":
         call = msg.tool_calls[0]

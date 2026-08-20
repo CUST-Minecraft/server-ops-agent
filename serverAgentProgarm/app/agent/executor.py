@@ -1,0 +1,53 @@
+"""工具执行器：执行的唯一入口。Day 6 起在这里插入权限检查与审计。"""
+import time
+from app.tools.base import ToolResult
+from app.tools.registry import ToolRegistry
+
+
+class ToolExecutor:
+    def __init__(self, registry: ToolRegistry):
+        self.registry = registry
+
+    def execute(self, name: str, args: dict | None = None) -> ToolResult:
+        """执行一个工具。约定：本方法永不抛异常，失败也以 ToolResult(status=error) 返回。"""
+        args = args or {}
+        invocation = f"{name}({', '.join(f'{k}={v!r}' for k, v in args.items())})"
+        tool = self.registry.get(name)
+        if tool is None:                                    # 情况一已给：未知工具
+            return ToolResult(status="error", error=f"未知工具: {name}",
+                              invocation=invocation)
+
+        start = time.monotonic()
+        try:
+            result = tool.handler(args)
+            elapsed = int((time.monotonic() - start) * 1000)
+            # TODO(你来实现) 情况二：执行成功，两种返回风格要兼容
+            #   - result 已是 ToolResult：补默认的 invocation/elapsed_ms（若为空/0）后返回
+            #   - result 是普通 dict：包装成 ToolResult(status="success", data=result, ...)
+
+            if isinstance(result, ToolResult):
+                result.invocation = result.invocation or invocation
+                result.elapsed_ms = elapsed
+                return result
+            if isinstance(result, dict):
+                return ToolResult(
+                    status="success",
+                    data=result,
+                    invocation=invocation,
+                    elapsed_ms=elapsed
+                )
+            return ToolResult(status="error",
+                              error=f"工具返回了无法识别的类型: {type(result).__name__}",
+                              invocation=invocation, elapsed_ms=elapsed)
+
+        except Exception as e:  # noqa: BLE001  执行器必须兜住一切
+            elapsed = int((time.monotonic() - start) * 1000)
+            # TODO(你来实现) 情况三：兜住异常
+            #   返回 ToolResult(status="error", error=f"{type(e).__name__}: {e}",
+            #                   invocation=..., elapsed_ms=...)
+            return ToolResult(
+                status="error",
+                error=f"{type(e).__name__}: {e}",
+                invocation=invocation,
+                elapsed_ms=elapsed
+            )

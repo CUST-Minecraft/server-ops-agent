@@ -2,7 +2,7 @@
 import re
 from app.ssh.ssh_client import SSHClient
 from app.ssh.ssh_response import SshResponse
-from app.tools.base import Tool
+from app.tools.base import Tool, ToolResult
 
 # 见步骤 6：服务名的白名单字符集
 _SERVICE_NAME_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
@@ -42,17 +42,21 @@ def build_readonly_tools(ssh: SSHClient) -> list[Tool]:
                 "used": used, "avail": avail, "used_pct": int(use_pct.rstrip("%"))}
 
     def service_status(args: dict) -> dict:
-        service = _validate_service_name(args["service"])
+        service = validate_service_name(args["service"])
         r = ssh.run(f"systemctl is-active {service}")   # 注意：is-active 失败不抛错，状态就在 stdout
         state = r["stdout"].strip() or "unknown"
         return {"service": service, "state": state, "active": state == "active"}
 
-    def read_service_logs(args: dict) -> dict:
-        service = _validate_service_name(args["service"])
+    def read_service_logs(args: dict) -> ToolResult:
+        service = validate_service_name(args["service"])
         lines = min(max(int(args.get("lines", 50)), 1), 200)
         r = ssh.run(f"journalctl -u {service} -n {lines} --no-pager")
         logs = r["stdout"].splitlines()
-        return {"service": service, "count": len(logs), "logs": logs}
+        if not logs or '-- No entries --' in logs:
+            return ToolResult(status="no_data", data={"service": service, "count": 0},
+                              invocation=f"read_service_logs(service={service})")
+        return ToolResult(status="success", data={"service": service, "count": len(logs), "logs": logs},
+                          invocation=f"read_service_logs(service={service})")
 
     return [
         Tool(name="get_cpu_status",
@@ -88,7 +92,7 @@ def build_readonly_tools(ssh: SSHClient) -> list[Tool]:
     ]
 
 
-def _validate_service_name(service: str) -> str:
+def validate_service_name(service: str) -> str:
     if not isinstance(service, str) or not _SERVICE_NAME_RE.match(service):
         raise ValueError(f"非法服务名: {service!r}（只允许字母/数字/._-）")
     return service
@@ -98,8 +102,7 @@ if __name__ == "__main__":
     ssh = SSHClient()
     tools = build_readonly_tools(ssh)
     by_name = {t.name: t for t in tools}
-
-    print(by_name["get_cpu_status"].handler({}))
-    print(by_name["get_service_status"].handler({"service": "ssh"}))
-    print(by_name["read_service_logs"].handler({"service": "ssh", "lines": 5}))
-    print(by_name["get_service_status"].handler({"service": "nginx; rm -rf /"}))
+    # print(by_name["get_cpu_status"].handler({}))
+    # print(by_name["get_service_status"].handler({"service": "ssh"}))
+    print(by_name["read_service_logs"].handler({"service": "noservice"}))
+    # print(by_name["get_service_status"].handler({"service": "nginx; rm -rf /"}))

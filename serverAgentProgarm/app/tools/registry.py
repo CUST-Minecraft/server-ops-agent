@@ -39,8 +39,8 @@ class ToolRegistry:
 if __name__ == "__main__":
     tool_registry = ToolRegistry()
     ssh = SSHClient()
-    tools_list   = build_readonly_tools(ssh)
-    for tool in tools_list:
-        tool_registry.register(tool)
+    tools_list_   = build_readonly_tools(ssh)
+    for tool_ in tools_list_:
+        tool_registry.register(tool_)
     print(tool_registry.schemas()[0])
     print(tool_registry.schemas()[0]["function"]["handler"]({}))
