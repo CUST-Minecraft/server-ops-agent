@@ -15,11 +15,10 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_db() -> None:
     """建表（只建缺失的表）。每个进程入口调用一次。"""
-    # TODO(你来实现) 两步，顺序是关键：
     #   1) 先 import app.storage.models（为什么顺序重要？--不导入则模型类从未被
     #      Python 执行定义，Base 根本不知道有任何表）
     #   2) 再调用 Base.metadata.create_all(engine)
-    Base().metadata.create_all(engine)
+    Base.metadata.create_all(engine)
 
 
 

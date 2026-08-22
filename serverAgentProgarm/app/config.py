@@ -10,6 +10,8 @@ class ServerSettings(BaseSettings):
     key_path : str
     db_url: str
     log_level: str
+    monitor_interval: int = 30          # MONITOR_INTERVAL，秒
+    watched_services: str = "ssh,docker"  # WATCHED_SERVICES，逗号分隔
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(

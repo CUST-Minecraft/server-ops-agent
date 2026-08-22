@@ -41,6 +41,22 @@ def run() -> None:
             #       逐字段构造 MetricSnapshot(...)...（8 个字段从 snap 取，
             #       collected_at 是 datetime 对象，直接传 snap["collected_at"]）
             #       session.add(...) + session.commit()
+            with SessionLocal() as session:
+                metric_snapshot = MetricSnapshot(
+                    collected_at = snap["collected_at"],
+                    cpu_used_pct=snap["cpu_used_pct"],
+                    load_1m=snap["load_1m"],
+                    load_5m=snap["load_5m"],
+                    load_15m=snap["load_15m"],
+                    mem_used_pct=snap["mem_used_pct"],
+                    mem_available_mb=snap["mem_available_mb"],
+                    disk_used_pct=snap["disk_used_pct"],
+                    services_status=snap["services_status"]
+
+                )
+                session.add(metric_snapshot)
+                session.commit()
+
             logger.info("快照入库 cpu=%.1f%% mem=%.1f%% disk=%.1f%% services=%s",
                         snap["cpu_used_pct"], snap["mem_used_pct"], snap["disk_used_pct"],
                         snap["services_status"])
