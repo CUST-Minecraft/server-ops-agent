@@ -9,6 +9,7 @@ dependencies = [
     "paramiko>=5.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.0.52",
 ]
 
 [build-system]
@@ -17,3 +18,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

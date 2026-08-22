@@ -46,7 +46,7 @@ class SSHClient:
 
 if __name__ == "__main__":
     client = SSHClient()
-    response:SshResponse = client.run("cd /home/misaka && ls")
+    response:SshResponse = client.run("uptime && ls ~")
     print(response)
 
 

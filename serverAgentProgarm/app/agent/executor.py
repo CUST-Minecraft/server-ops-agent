@@ -21,7 +21,6 @@ class ToolExecutor:
         try:
             result = tool.handler(args)
             elapsed = int((time.monotonic() - start) * 1000)
-            # TODO(你来实现) 情况二：执行成功，两种返回风格要兼容
             #   - result 已是 ToolResult：补默认的 invocation/elapsed_ms（若为空/0）后返回
             #   - result 是普通 dict：包装成 ToolResult(status="success", data=result, ...)
 
@@ -42,7 +41,6 @@ class ToolExecutor:
 
         except Exception as e:  # noqa: BLE001  执行器必须兜住一切
             elapsed = int((time.monotonic() - start) * 1000)
-            # TODO(你来实现) 情况三：兜住异常
             #   返回 ToolResult(status="error", error=f"{type(e).__name__}: {e}",
             #                   invocation=..., elapsed_ms=...)
             return ToolResult(

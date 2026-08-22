@@ -1,5 +1,7 @@
 # ServerOpsAgent -- 智能服务器监测与自动运维 Agent
 
+> [English](README.en.md) | 中文
+
 > 一个用"确定性工程"包裹 LLM 决策的单机自治运维 Agent：
 > 通过 SSH 监控 Linux 服务器，发现异常自动调查、受控修复、闭环验证、全程留痕。
 
@@ -65,7 +67,7 @@ Python 3.13 / 纯手写 Agent 循环（无重框架，见 [ADR-0005](docs/design
 ## 快速开始
 
 ```bash
-# 前置：目标 Linux 虚拟机（systemd + docker）配好 SSH 密钥登录；LLM API Key
+# 前置：目标 Linux 虚拟机 + SSH 密钥登录 + LLM API Key（完整步骤见 serverAgentProgarm/README.md）
 cd serverAgentProgarm
 uv sync
 cp .env.example .env       # 填入配置项（当前需：服务器/SSH key/LLM key/DB_URL/LOG_LEVEL）
