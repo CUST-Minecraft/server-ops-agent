@@ -23,7 +23,14 @@ class LLMSettings(BaseSettings):
     base_url: str
     model_id: str
 
-
+class ThresholdSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8",
+                                      env_prefix="THRESHOLD_", extra="ignore")
+    cpu_pct: float = 85
+    mem_pct: float = 85
+    disk_pct: float = 80
+    sustain: int = 3
+    service_sustain: int = 2
 
 if __name__ == "__main__":
     s = ServerSettings()

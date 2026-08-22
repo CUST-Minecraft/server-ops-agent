@@ -36,7 +36,6 @@ def run() -> None:
     while True:
         try:
             snap = collector.collect()
-            # TODO(你来实现) 入库：
             #   with SessionLocal() as session:
             #       逐字段构造 MetricSnapshot(...)...（8 个字段从 snap 取，
             #       collected_at 是 datetime 对象，直接传 snap["collected_at"]）

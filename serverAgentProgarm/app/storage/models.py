@@ -23,3 +23,16 @@ class MetricSnapshot(Base):
     mem_available_mb: Mapped[float]
     disk_used_pct: Mapped[float]
     services_status: Mapped[dict] = mapped_column(JSON, default=dict)
+
+class Incident(Base):
+    """一次异常事件（工单）。状态机：open -> resolved（Day 8/9 将扩展中间状态）。"""
+    __tablename__ = "incidents"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(index=True)     # 规则 key 或 "service_down:<name>"
+    severity: Mapped[str]                             # warning / critical
+    status: Mapped[str] = mapped_column(default="open")   # open / resolved（后续扩展）
+    title: Mapped[str]                                # 人话标题
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)  # 开单时的事实快照
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
