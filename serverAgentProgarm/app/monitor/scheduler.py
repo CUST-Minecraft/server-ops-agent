@@ -4,13 +4,16 @@ import time
 
 from app import setup_logging
 from app.agent.executor import ToolExecutor
-from app.config import ServerSettings
+from app.config import ServerSettings , ThresholdSettings
 from app.monitor.collector import Collector
 from app.ssh.ssh_client import SSHClient
 from app.storage.db import SessionLocal, init_db
 from app.storage.models import MetricSnapshot
 from app.tools.builtin import build_readonly_tools
 from app.tools.registry import ToolRegistry
+from app.detect.rules import build_rules
+from app.detect.detector import Detector
+from app.detect.incident_service import IncidentService
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +32,20 @@ def build_collector() -> Collector:
 def run() -> None:
     setup_logging()
     settings = ServerSettings()
+    rules_settings = ThresholdSettings()
+    rule = build_rules(rules_settings)
     init_db()
     collector = build_collector()
+
+    services = [s.strip() for s in settings.watched_services.split(",") if s.strip()]
+    detector = Detector(rules=rule, service_sustain=rules_settings.service_sustain, watched_services=services)
+    incident_service = IncidentService(SessionLocal)
+
     logger.info("巡检启动 interval=%ss services=%s", settings.monitor_interval,
                 settings.watched_services)
     while True:
         try:
             snap = collector.collect()
-            #   with SessionLocal() as session:
-            #       逐字段构造 MetricSnapshot(...)...（8 个字段从 snap 取，
-            #       collected_at 是 datetime 对象，直接传 snap["collected_at"]）
-            #       session.add(...) + session.commit()
             with SessionLocal() as session:
                 metric_snapshot = MetricSnapshot(
                     collected_at = snap["collected_at"],
@@ -56,9 +62,15 @@ def run() -> None:
                 session.add(metric_snapshot)
                 session.commit()
 
+
             logger.info("快照入库 cpu=%.1f%% mem=%.1f%% disk=%.1f%% services=%s",
                         snap["cpu_used_pct"], snap["mem_used_pct"], snap["disk_used_pct"],
                         snap["services_status"])
+            events = detector.check(snap)
+            if events:
+                incident_service.apply(events)
+                logger.warning(msg=f"检测到事件:{events}")
+
         except Exception:                      # noqa: BLE001  长驻进程不许死
             logger.exception("本轮巡检失败（进程继续运行）")
         time.sleep(settings.monitor_interval)
