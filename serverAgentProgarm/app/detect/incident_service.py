@@ -1,9 +1,9 @@
 """Incident 开单/关单：唯一会写 incidents 表的地方。"""
 import logging
 from datetime import datetime, timezone
-
+from typing import List
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
-
 from app.detect.detector import DetectEvent
 from app.storage.models import Incident
 
@@ -50,3 +50,15 @@ class IncidentService:
         return (session.query(Incident)
                 .filter(Incident.kind == kind, Incident.status == "open")
                 .order_by(Incident.id.desc()).first())
+
+    def find_open_kind_set(self) -> set[str]:
+        with self.session_factory() as session:
+            stmt = (
+                select(Incident.kind)  # 直接只查kind字段，不用查完整ORM对象，效率更高
+                .where(Incident.status == "open")
+            )
+            # scalars复数，取出每一行的kind值
+            kinds = session.scalars(stmt).all()
+            return set(kinds)
+
+

@@ -22,8 +22,9 @@ class DetectEvent:
 class Detector:
     """有状态：内部维护连击计数，每次 check() 喂一个快照。"""
 
-    def __init__(self, rules: list[Rule], service_sustain: int, watched_services: list[str]):
+    def __init__(self, rules: list[Rule], service_sustain: int, watched_services: list[str],open_kinds: set[str]):
         self.rules = rules
+        self.open_kinds  = open_kinds # 已经开单的kind
         self.service_sustain = service_sustain
         self.watched_services = watched_services
         self._breach_streak: dict[str, int] = defaultdict(int)   # 越界连击
@@ -50,7 +51,8 @@ class Detector:
         if breached:                                            # 越界分支已给
             self._ok_streak[kind] = 0
             self._breach_streak[kind] += 1
-            if self._breach_streak[kind] == rule.sustain:      # == 而不是 >=：只在到达时发一次
+            if self._breach_streak[kind] == rule.sustain:    # == 而不是 >=：只在到达时发一次
+                self.open_kinds.add(kind)
                 return DetectEvent("open", kind, rule.severity, rule.title,
                                    detail={"value": snap.get(rule.key), **(extra or {}),
                                            "sustain": rule.sustain,
@@ -62,7 +64,7 @@ class Detector:
             #   （注意同样用 == 不用 >=：恢复也只发一次事件）
             self._ok_streak[kind] += 1
             self._breach_streak[kind] = 0
-            if self._ok_streak[kind] == rule.sustain:
+            if self._ok_streak[kind] == rule.sustain and kind in self.open_kinds:
                 return DetectEvent("resolve", kind, rule.severity, rule.title,detail={**(extra or {})})
 
         return None

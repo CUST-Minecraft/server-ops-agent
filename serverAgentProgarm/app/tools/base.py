@@ -29,6 +29,7 @@ class Tool:
     description: str
     parameters:dict[str, object]
     handler:Callable[[dict], dict | ToolResult]
+    risk_level: str = "low"     # "low" | "medium" | "high"；默认低风险（只读）
 
 
 

@@ -2,17 +2,23 @@
 from app.ssh.ssh_client import SSHClient
 from app.tools.builtin import build_readonly_tools
 from app.tools.registry import ToolRegistry
+from app.tools.remediation import build_remediation_tools
 
 if __name__ == "__main__":
     registry = ToolRegistry()
     for tool in build_readonly_tools(SSHClient()):
         registry.register(tool)
+    for tool in build_remediation_tools(SSHClient()):
+        registry.register(tool)
 
     print("已注册工具:", registry.names())
+    print(registry.schemas())
 
     import json
     print("\nget_cpu_status 的 schema:")
     print(json.dumps(registry.schemas()[0], ensure_ascii=False, indent=2))
+    print("\nrestart_service 的 schema:")
+    print(json.dumps(registry.schemas()[-1], ensure_ascii=False, indent=2))
 
     tool = registry.get("get_service_status")
     print("\n直接调用 get_service_status({\"service\": \"ssh\"}):")

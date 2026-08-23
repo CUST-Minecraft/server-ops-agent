@@ -38,8 +38,9 @@ def run() -> None:
     collector = build_collector()
 
     services = [s.strip() for s in settings.watched_services.split(",") if s.strip()]
-    detector = Detector(rules=rule, service_sustain=rules_settings.service_sustain, watched_services=services)
     incident_service = IncidentService(SessionLocal)
+    detector = Detector(rules=rule, service_sustain=rules_settings.service_sustain, watched_services=services,open_kinds=incident_service.find_open_kind_set())
+
 
     logger.info("巡检启动 interval=%ss services=%s", settings.monitor_interval,
                 settings.watched_services)
