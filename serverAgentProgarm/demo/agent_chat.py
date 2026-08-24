@@ -3,6 +3,8 @@ from app import setup_logging, ServerSettings
 from app.agent.executor import ToolExecutor
 from app.agent.loop import SYSTEM_PROMPT, run_agent
 from app.llm.llm_client import LLMClient
+from app.runtime_deps import build_executor_and_approvals
+from app.security.approval import ApprovalManager
 from app.security.policy import PermissionEngine
 from app.ssh.ssh_client import SSHClient
 from app.storage.db import SessionLocal, init_db
@@ -14,20 +16,13 @@ from app.tools.remediation import build_remediation_tools
 def build_agent() -> tuple:
     """装配：依赖在根上创建一次，逐层传递。"""
     init_db()
-    ssh = SSHClient()
-    registry = ToolRegistry()
-    for tool in build_readonly_tools(ssh):
-        registry.register(tool)
-    for tool in build_remediation_tools(ssh):
-        registry.register(tool)
-    policy = PermissionEngine(ServerSettings().policy_mode)
-    executor_tool = ToolExecutor(registry, policy=policy, session_factory=SessionLocal)
-    return LLMClient(), executor_tool, registry
+    executor, registry, approvals = build_executor_and_approvals()
+    return LLMClient(), executor, registry, approvals
 
 
 if __name__ == "__main__":
     setup_logging()
-    llm, executor, registry = build_agent()          # 装配已给：顺序即依赖顺序
+    llm, executor, registry, approvals = build_agent()          # 装配已给：顺序即依赖顺序
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     print("ServerOpsAgent 已就绪（输入 q 退出）。试试：服务器资源状况如何？")
     #   while True:

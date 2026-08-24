@@ -1,20 +1,25 @@
 """工具执行器：执行的唯一入口。Day 6 起在这里插入权限检查与审计。"""
+import logging
 import time
-
 from app.security.audit import log_decision
 from app.security.policy import Decision
 from app.tools.base import ToolResult
 from app.tools.registry import ToolRegistry
 from app.security.policy import PermissionEngine
 
+logger = logging.getLogger(__name__)
 
 class ToolExecutor:
-    def __init__(self,registry: ToolRegistry,policy: PermissionEngine | None = None, session_factory=None):
+    def __init__(self,registry: ToolRegistry,policy: PermissionEngine | None = None, session_factory=None, approval_manager=None):
         self.session_factory = session_factory
         self.policy = policy
         self.registry = registry
+        self.approval_manager = approval_manager
+        if policy is not None and approval_manager is None:
+            logger.warning("权限引擎已启用但审批管理器未装配："
+                           "NEEDS_APPROVAL 将无法创建审批单")
 
-    def execute(self, name: str, args: dict | None = None) -> ToolResult:
+    def execute(self, name: str, args: dict | None = None,approved: bool = False) -> ToolResult:
         """执行一个工具。约定：本方法永不抛异常，失败也以 ToolResult(status=error) 返回。"""
         args = args or {}
         invocation = f"{name}({', '.join(f'{k}={v!r}' for k, v in args.items())})"
@@ -36,10 +41,31 @@ class ToolExecutor:
             #   返回 ToolResult(status="approval_required",
             #                   error=f"等待人工审批: {decision.reason}", invocation=...)
             #   （不是 error！--它表达"操作合法但被挂起"，Day 7 起会在此创建审批单）
-            if decision.decision == Decision.NEEDS_APPROVAL:
-                return ToolResult(status="approval_required",
-                              error=f"等待人工审批: {decision.reason}", invocation=invocation)
+
+            needs = decision.decision == Decision.NEEDS_APPROVAL
+            if needs and not approved:
+                if self.approval_manager is not None:
+                    req = self.approval_manager.create_pending(name, args, decision.reason)
+                    return ToolResult(
+                        status="approval_required",
+                        error=f"已创建审批单 #{req.id}"
+                              f"（{self.approval_manager.ttl_minutes}分钟内有效），等待人工批准",
+                        invocation=invocation,
+                    )
+                # 装配缺陷：策略能挂起，却没有解除挂起的组件
+                logger.error("工具 %s 需要审批，但 approval_manager 未装配，挂起无法解除", name)
+                return ToolResult(
+                    status="error",
+                    error="审批管理器未装配，无法创建审批单（配置错误）",
+                    invocation=invocation,
+                )
+            if needs and approved:
+                logger.info("工具 %s 凭已批准的审批单执行", name)
+
+
         # ---- 闸门通过，执行（与 Day 3 相同） ----
+
+
 
         try:
             result = tool.handler(args)

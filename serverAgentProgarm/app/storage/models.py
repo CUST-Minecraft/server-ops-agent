@@ -49,3 +49,26 @@ class AuditLog(Base):
     reason: Mapped[str]
     status: Mapped[str] = mapped_column(default="decided")   # decided / executed（Day 7 补）
     incident_id: Mapped[int | None] = mapped_column(nullable=True)  # Day 9 关联工单
+
+
+class ApprovalRequest(Base):
+    """一张审批单 = 一次被挂起的工具调用。状态机：pending -> approved | rejected | expired。"""
+    __tablename__ = "approval_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tool: Mapped[str]
+    args: Mapped[dict] = mapped_column(JSON)               # 审批时人看到的就是它
+    args_hash: Mapped[str]                                  # 防篡改绑定（见步骤 2）
+    reason: Mapped[str]                                     # 权限引擎给出的挂起理由
+    status: Mapped[str] = mapped_column(default="pending")  # pending/approved/rejected/expired
+    result_status: Mapped[str | None] = mapped_column(nullable=True)  # 执行结果（approved 后填）
+    incident_id: Mapped[int | None] = mapped_column(nullable=True)    # Day 9 起关联工单
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(nullable=True)     # 审批人标识
+
+    def __repr__(self):
+        """调试友好：print / 日志里直接可读，而不是 <ApprovalRequest object at 0x...>。"""
+        return (f"ApprovalRequest(id={self.id}, tool={self.tool!r}, "
+                f"args={self.args!r}, status={self.status!r})")
