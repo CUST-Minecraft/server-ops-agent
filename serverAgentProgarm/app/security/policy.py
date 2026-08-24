@@ -50,18 +50,25 @@ class PermissionEngine:
             return PermissionDecision(Decision.DENY,
                                       f"工具声明了未知风险等级: {tool.risk_level!r}")
 
-        # TODO(你来实现) 闸门3：参数级动态升降
         #   若 tool.name == "restart_service" 且 str(args.get("service", "")).lower()
         #   在 CRITICAL_SERVICES 中 -> risk = RiskLevel.HIGH
         #   （提示：先 .lower() 再匹配；这一层是"静态基线上的修正"）
 
+        if tool.name == "restart_service":
+            lower = str(args.get("service", "")).lower()
+            if lower in CRITICAL_SERVICES:
+                risk = RiskLevel.HIGH
         # ---- 闸门4：模式策略 ----
         return self._decide(risk)
 
     def _decide(self, risk: RiskLevel) -> PermissionDecision:
-        # TODO(你来实现)：按下表实现决策矩阵（验收 = demo/policy_matrix.py 的 12 格输出）
         #   low                                 -> ALLOW，reason "只读操作"
         #   mode == "auto" 且 risk == MEDIUM    -> ALLOW，reason "auto 模式：中风险自动放行"
         #   其余（medium/high，任意模式）        -> NEEDS_APPROVAL，
         #       reason f"{risk.value} 级写操作（mode={self.mode}），需人工审批"
-        ...
+        if risk == RiskLevel.LOW:
+            return PermissionDecision(Decision.ALLOW,"低风险只读操作")
+        elif risk == RiskLevel.MEDIUM and self.mode == "auto":
+            return PermissionDecision(Decision.ALLOW,f"{self.mode}模式,中风险,自动操作模式")
+        else:
+            return PermissionDecision(Decision.NEEDS_APPROVAL,f"{risk.value} 级写操作（mode={self.mode}），需人工审批")

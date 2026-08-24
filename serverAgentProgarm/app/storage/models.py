@@ -36,3 +36,16 @@ class Incident(Base):
     detail: Mapped[dict] = mapped_column(JSON, default=dict)  # 开单时的事实快照
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class AuditLog(Base):
+    """工具调用决策审计：每一次经过权限闸门的调用一条记录。"""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    tool: Mapped[str]
+    args: Mapped[dict] = mapped_column(JSON, default=dict)
+    decision: Mapped[str]                      # allow / needs_approval / deny
+    reason: Mapped[str]
+    status: Mapped[str] = mapped_column(default="decided")   # decided / executed（Day 7 补）
+    incident_id: Mapped[int | None] = mapped_column(nullable=True)  # Day 9 关联工单

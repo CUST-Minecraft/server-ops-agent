@@ -1,11 +1,17 @@
 """工具执行器：执行的唯一入口。Day 6 起在这里插入权限检查与审计。"""
 import time
+
+from app.security.audit import log_decision
+from app.security.policy import Decision
 from app.tools.base import ToolResult
 from app.tools.registry import ToolRegistry
+from app.security.policy import PermissionEngine
 
 
 class ToolExecutor:
-    def __init__(self, registry: ToolRegistry):
+    def __init__(self,registry: ToolRegistry,policy: "PermissionEngine | None" = None, session_factory=None):
+        self.session_factory = session_factory
+        self.policy = policy
         self.registry = registry
 
     def execute(self, name: str, args: dict | None = None) -> ToolResult:
@@ -18,6 +24,21 @@ class ToolExecutor:
                               invocation=invocation)
 
         start = time.monotonic()
+
+        # ---- 权限闸门（Day 6）：所有工具必经 ----
+        if self.policy is not None:
+            decision = self.policy.check(tool, args)
+            if self.session_factory is not None:
+                log_decision(self.session_factory, name, args, decision)
+            if decision.decision == Decision.DENY:
+                return ToolResult(status="error",
+                                  error=f"权限拒绝: {decision.reason}", invocation=invocation)
+            # TODO(你来实现) NEEDS_APPROVAL 分支：
+            #   返回 ToolResult(status="approval_required",
+            #                   error=f"等待人工审批: {decision.reason}", invocation=...)
+            #   （不是 error！--它表达"操作合法但被挂起"，Day 7 起会在此创建审批单）
+        # ---- 闸门通过，执行（与 Day 3 相同） ----
+
         try:
             result = tool.handler(args)
             elapsed = int((time.monotonic() - start) * 1000)
