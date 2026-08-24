@@ -6,6 +6,7 @@ from app import setup_logging
 from app.agent.executor import ToolExecutor
 from app.config import ServerSettings , ThresholdSettings
 from app.monitor.collector import Collector
+from app.security.policy import PermissionEngine
 from app.ssh.ssh_client import SSHClient
 from app.storage.db import SessionLocal, init_db
 from app.storage.models import MetricSnapshot
@@ -14,6 +15,7 @@ from app.tools.registry import ToolRegistry
 from app.detect.rules import build_rules
 from app.detect.detector import Detector
 from app.detect.incident_service import IncidentService
+from app.tools.remediation import build_remediation_tools
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +27,11 @@ def build_collector() -> Collector:
     registry = ToolRegistry()
     for tool in build_readonly_tools(ssh):
         registry.register(tool)
+    for tool in build_remediation_tools(ssh):
+        registry.register(tool)
     services = [s.strip() for s in settings.watched_services.split(",") if s.strip()]
-    return Collector(ToolExecutor(registry), services)
+    permission_engine = PermissionEngine(settings.policy_mode)
+    return Collector(ToolExecutor(registry=registry,session_factory=SessionLocal,policy=permission_engine), services)
 
 
 def run() -> None:

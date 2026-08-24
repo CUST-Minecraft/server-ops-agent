@@ -9,7 +9,7 @@ from app.security.policy import PermissionEngine
 
 
 class ToolExecutor:
-    def __init__(self,registry: ToolRegistry,policy: "PermissionEngine | None" = None, session_factory=None):
+    def __init__(self,registry: ToolRegistry,policy: PermissionEngine | None = None, session_factory=None):
         self.session_factory = session_factory
         self.policy = policy
         self.registry = registry
@@ -33,10 +33,12 @@ class ToolExecutor:
             if decision.decision == Decision.DENY:
                 return ToolResult(status="error",
                                   error=f"权限拒绝: {decision.reason}", invocation=invocation)
-            # TODO(你来实现) NEEDS_APPROVAL 分支：
             #   返回 ToolResult(status="approval_required",
             #                   error=f"等待人工审批: {decision.reason}", invocation=...)
             #   （不是 error！--它表达"操作合法但被挂起"，Day 7 起会在此创建审批单）
+            if decision.decision == Decision.NEEDS_APPROVAL:
+                return ToolResult(status="approval_required",
+                              error=f"等待人工审批: {decision.reason}", invocation=invocation)
         # ---- 闸门通过，执行（与 Day 3 相同） ----
 
         try:

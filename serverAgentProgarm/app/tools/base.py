@@ -8,7 +8,7 @@ class ToolResult:
     - error:      执行出错（异常/命令失败/解析失败）
     - no_data:    执行成功但无有效数据（如服务没有日志）
     """
-    status: str                 # "success" | "error" | "no_data"
+    status: str                 # "success" | "error" | "no_data","approval_required"
     data: dict | None = None
     error: str | None = None
     invocation: str = ""        # 可追溯：实际执行了什么
