@@ -68,6 +68,20 @@ class ApprovalRequest(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decided_by: Mapped[str | None] = mapped_column(nullable=True)     # 审批人标识
 
+class RemediationRecord(Base):
+    """一次修复预案执行的完整记录。状态: planned -> executing -> verified | failed。"""
+    __tablename__ = "remediation_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    incident_id: Mapped[int | None] = mapped_column(nullable=True)  # Day 9 起关联
+    runbook: Mapped[str]
+    plan: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str]  # planned/executing/verified/failed
+    exec_status: Mapped[str | None] = mapped_column(nullable=True)  # 执行结果（ToolResult.status）
+    verify_passed: Mapped[bool | None] = mapped_column(nullable=True)
+    verify_evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
     def __repr__(self):
         """调试友好：print / 日志里直接可读，而不是 <ApprovalRequest object at 0x...>。"""
         return (f"ApprovalRequest(id={self.id}, tool={self.tool!r}, "

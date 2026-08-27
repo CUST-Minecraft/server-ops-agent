@@ -14,6 +14,7 @@ class ServerSettings(BaseSettings):
     watched_services: str = "ssh,docker"  # WATCHED_SERVICES，逗号分隔
     policy_mode: str = "standard"
     approval_ttl_minutes: int = 60 # 默认审批时间
+    investigate_max_retries: int = 2
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(

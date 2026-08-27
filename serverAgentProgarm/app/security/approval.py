@@ -112,7 +112,7 @@ class ApprovalManager:
 
     def expire_stale(self) -> int:
         """把已过期的 pending 单标记为 expired。Runner 每 tick 调用（Day 9）。"""
-        # TODO(你来实现)：update ... where status=="pending" and expires_at < now；返回条数
+        # ：update ... where status=="pending" and expires_at < now；返回条数
         with self.session_factory() as session:
             now = datetime.now(timezone.utc)
             result = cast(CursorResult,

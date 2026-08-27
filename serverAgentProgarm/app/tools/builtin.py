@@ -58,6 +58,18 @@ def build_readonly_tools(ssh: SSHClient) -> list[Tool]:
         return ToolResult(status="success", data={"service": service, "count": len(logs), "logs": logs},
                           invocation=f"read_service_logs(service={service})")
 
+
+    def tcp_probe(args: dict) -> dict:
+        port = args["port"]
+        if not isinstance(port, int) or not (1 <= port <= 65535):
+            raise ValueError(f"非法端口: {port!r}")
+        # 领域速查：bash 内建 /dev/tcp/<ip>/<port> 能建立 TCP 连接即说明端口在监听
+        r = ssh.run(f"timeout 2 bash -c '</dev/tcp/127.0.0.1/{port}' && echo OPEN || echo CLOSED")
+        return {"port": port, "port_open": r["stdout"].strip().endswith("OPEN"),
+                "elapsed_ms": r["elapsed"]}
+
+
+
     return [
         Tool(name="get_cpu_status",
              description="获取目标服务器当前 CPU 使用率（%）与 1/5/15 分钟平均负载",
@@ -89,6 +101,13 @@ def build_readonly_tools(ssh: SSHClient) -> list[Tool]:
                                                   "description": "返回行数，默认 50"}},
                          "required": ["service"]},
              handler=read_service_logs),
+        Tool(name="tcp_probe",
+             description="探测目标服务器本机某 TCP 端口是否有进程监听（判断服务真实可用性）",
+             parameters={"type": "object",
+                         "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535,
+                                                 "description": "端口号，如 80、3306"}},
+                         "required": ["port"]},
+             handler=tcp_probe),
     ]
 
 
