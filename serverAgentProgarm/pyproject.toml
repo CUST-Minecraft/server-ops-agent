@@ -9,6 +9,7 @@ dependencies = [
     "paramiko>=5.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
+    "requests>=2.34.2",
     "sqlalchemy>=2.0.52",
     "typer>=0.27.1",
 ]

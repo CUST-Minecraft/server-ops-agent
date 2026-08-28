@@ -11,7 +11,7 @@ from app.tools.remediation import build_remediation_tools
 from app.tools.registry import ToolRegistry
 
 
-def build_executor_and_approvals() -> tuple:
+def build_executor_and_approvals() -> tuple[ToolExecutor, ToolRegistry, ApprovalManager]:
     settings = ServerSettings()
     ssh = SSHClient()
     registry = ToolRegistry()

@@ -4,6 +4,7 @@ import logging
 import time
 
 from app import setup_logging
+from app.alert import Alerter
 from app.config import ServerSettings, ThresholdSettings
 from app.detect.detector import Detector
 from app.detect.incident_service import IncidentService
@@ -31,7 +32,10 @@ def run() -> None:
     executor, registry, approvals = build_executor_and_approvals()
     thresholds = ThresholdSettings()
     services = [s.strip() for s in settings.watched_services.split(",") if s.strip()]
-    incident_service = IncidentService(SessionLocal)
+
+    alerter = Alerter(settings.alert_webhook_url)
+    incident_service = IncidentService(SessionLocal,alerter=alerter)
+
     detector = Detector(build_rules(thresholds), thresholds.service_sustain, services,
                         open_kinds=incident_service.find_open_kind_set())
     collector = Collector(executor, services)

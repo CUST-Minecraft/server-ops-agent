@@ -2,7 +2,7 @@
 import copy
 import logging
 from datetime import datetime, timezone
-from typing import List
+from app.alert import Alerter
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from app.detect.detector import DetectEvent
@@ -21,8 +21,9 @@ ALLOWED_TRANSITIONS :  dict[str, set[str]] = {
 
 
 class IncidentService:
-    def __init__(self, session_factory: sessionmaker):
+    def __init__(self, session_factory: sessionmaker,alerter : Alerter | None = None):
         self.session_factory = session_factory
+        self.alerter = alerter
 
     def apply(self, events: list[DetectEvent]) -> list[Incident]:
         changed: list[Incident] = []
@@ -38,6 +39,7 @@ class IncidentService:
                     session.add(inc)
                     session.flush()                   # 拿到自增 id
                     changed.append(inc)
+                    if self.alerter: self.alerter.incident_opened(inc)
                     logger.warning("Incident #%s 已开启: %s (%s)", inc.id, inc.title, e.detail)
                 elif e.action == "resolve":
                     #   1) inc = self._find_open(session, e.kind)；没有 open 单则跳过
@@ -51,6 +53,7 @@ class IncidentService:
                     inc.status = "resolved"
                     inc.resolved_at = datetime.now(timezone.utc)
                     changed.append(inc)
+                    if self.alerter: self.alerter.incident_resolved(inc)
                     logger.warning("Incident #%s 已解决: %s", inc.id, inc.title)
             session.commit()
         return changed

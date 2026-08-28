@@ -1,17 +1,114 @@
+"""serveragent 主 CLI：操作员的唯一门面。"""
 import typer
 
-app = typer.Typer(help="ServerOpsAgent -- 智能服务器运维 Agent")
+from app import setup_logging
+
+app = typer.Typer(help="ServerOpsAgent -- 智能服务器监测与自动运维 Agent")
+
 
 @app.command()
 def run():
-    """启动自治闭环（监控+检测+调查+修复）"""
+    """启动自治闭环（监控 -> 检测 -> 调查 -> 审批 -> 修复 -> 验证）"""
+    setup_logging()
     from app.runtime.runner import run as runner_run
     runner_run()
 
+
 @app.command()
-def incidents(n: int = typer.Option(10, help="显示条数")):
-    """显示最近工单"""
-    ...
+def status():
+    """最新快照 + 最近工单 + 待审批数的一屏摘要"""
+    setup_logging()
+    from app.storage.db import SessionLocal, init_db
+    from app.storage.models import ApprovalRequest, Incident, MetricSnapshot
+    init_db()
+    with SessionLocal() as s:
+        snap = s.query(MetricSnapshot).order_by(MetricSnapshot.id.desc()).first()
+        inc = s.query(Incident).order_by(Incident.id.desc()).first()
+        pending = s.query(ApprovalRequest).filter_by(status="pending").count()
+    if snap:
+        print(f"最近快照(#{snap.id}): cpu={snap.cpu_used_pct}% mem={snap.mem_used_pct}% "
+              f"disk={snap.disk_used_pct}% services={snap.services_status}")
+    if inc:
+        print(f"最近工单: #{inc.id} [{inc.status}] {inc.title}")
+    print(f"待审批: {pending} 张")
+
+
+@app.command()
+def incidents(n: int = typer.Argument(10)):
+    """显示最近 N 张工单"""
+    setup_logging()
+    # 已给（复用 demo/incidents.py 的查询逻辑，迁入此处）
+    from app.storage.db import SessionLocal, init_db
+    from app.storage.models import Incident
+    init_db()
+    with SessionLocal() as s:
+        for i in s.query(Incident).order_by(Incident.id.desc()).limit(n)[::-1]:
+            print(f"#{i.id} [{i.status:10s}] {i.title}  opened={i.opened_at} "
+                  f"resolved={i.resolved_at}")
+
+
+@app.command()
+def approvals():
+    """显示待审批的操作"""
+    # 复用 ApprovalManager.list_pending()，逐条打印
+    #   id / tool / args / reason / expires_at（对照 Day 7 CLI 的输出格式）
+    setup_logging()
+    from app.runtime_deps import build_executor_and_approvals
+
+    _, _, approval = build_executor_and_approvals()
+    reps = approval.list_pending()
+    if not reps:
+        print("无待审批表")
+        return
+    for r in reps:
+        print(f"#{r.id}  {r.status.upper():8s} {r.tool}  {r.args}")
+        print(f"     理由: {r.reason}")
+        print(f"     有效期至: {r.expires_at}")
+
+
+@app.command()
+def approve(approval_id: int):
+    """批准一张审批单并自动执行"""
+    setup_logging()
+    from app.runtime_deps import build_executor_and_approvals
+
+    _, _, approval = build_executor_and_approvals()
+    print(approval.approve(approval_id))
+
+
+@app.command()
+def reject(approval_id: int):
+    """驳回一张审批单"""
+    setup_logging()
+    from app.runtime_deps import build_executor_and_approvals
+
+    _, _, approval = build_executor_and_approvals()
+    print(approval.reject(approval_id))
+
+
+@app.command()
+def chat():
+    """与 Agent 手动对话（诊断/问答入口）"""
+    setup_logging()
+    from app.runtime_deps import build_executor_and_approvals
+    from app.agent.loop import run_agent
+    from app.llm.llm_client import LLMClient
+    from app.agent.loop import SYSTEM_PROMPT
+
+    # 已给：对话循环与 Day 3 demo/agent_chat 相同，装配换 runtime_deps
+    executor, registry, approval = build_executor_and_approvals()
+    llm = LLMClient()
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    print("ServerOpsAgent 已就绪（输入 q 退出）。试试：服务器资源状况如何？")
+
+    while True:
+        user_input = input("->")
+        if user_input.strip() in ["q" , "quit" , "exit"]:
+            break
+        messages.append({"role": "user", "content": user_input})
+        answer = run_agent(llm,executor,registry,messages)
+        print(answer)
+
 
 if __name__ == "__main__":
     app()
