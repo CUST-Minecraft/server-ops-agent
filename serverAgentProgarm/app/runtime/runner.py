@@ -142,18 +142,29 @@ def _handle_open(inc_id: int, incident_service: IncidentService,
             logger.warning("Incident #%s 调查失败，回退 open 重试（第 %s 次）", inc_id, retry)
         return
 
-    # 调查成功：结论写回 detail
-    _write_detail(inc_id, {"investigation": conclusion, "investigate_retry_count": 0})
-
+    # 调查成功
     rb_name = conclusion.get("recommended_runbook")
     root_cause = conclusion.get("root_cause", "")
 
     if rb_name is None:
-        # 无推荐预案（查不清/不需要修）：结论已记录，回退 open 下轮重试
-        incident_service.update_status(inc_id, "open",
-                                       note=f"无推荐预案，根因: {root_cause}")
-        logger.info("Incident #%s 调查完成但无预案，回退 open 重试", inc_id)
+        # 无推荐预案（查不清/不需要修）：计一次重试，超上限则 failed（防无限循环）
+        retry += 1
+        _write_detail(inc_id, {"investigation": conclusion,
+                               "investigate_retry_count": retry})
+        if retry >= settings.investigate_max_retries:
+            incident_service.update_status(inc_id, "failed",
+                                           note=f"无推荐预案 {retry} 次，超过上限，需人工介入")
+            logger.warning("Incident #%s 无推荐预案 %s 次，标记 failed 需人工介入",
+                           inc_id, retry)
+        else:
+            incident_service.update_status(inc_id, "open",
+                                           note=f"无推荐预案，第 {retry} 次重试")
+            logger.info("Incident #%s 调查完成但无预案，回退 open 重试（第 %s 次）",
+                        inc_id, retry)
         return
+
+    # 有预案：结论写回 detail，重置重试计数
+    _write_detail(inc_id, {"investigation": conclusion, "investigate_retry_count": 0})
 
     # 有推荐预案：找到 RUNBOOKS 里对应的项
     rb = next((r for r in RUNBOOKS if r.name == rb_name), None)

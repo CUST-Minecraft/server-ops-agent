@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     "sqlalchemy>=2.0.52",
+    "typer>=0.27.1",
 ]
 
 [build-system]
@@ -22,3 +23,6 @@ packages = ["app"]
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+[project.scripts]
+serveragent = "app.cli:app"

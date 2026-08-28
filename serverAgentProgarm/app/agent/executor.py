@@ -15,9 +15,6 @@ class ToolExecutor:
         self.policy = policy
         self.registry = registry
         self.approval_manager = approval_manager
-        if policy is not None and approval_manager is None:
-            logger.warning("权限引擎已启用但审批管理器未装配："
-                           "NEEDS_APPROVAL 将无法创建审批单")
 
     def execute(self, name: str, args: dict | None = None,approved: bool = False) -> ToolResult:
         """执行一个工具。约定：本方法永不抛异常，失败也以 ToolResult(status=error) 返回。"""

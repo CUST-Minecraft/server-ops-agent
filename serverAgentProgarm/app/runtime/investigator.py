@@ -18,10 +18,12 @@ INVESTIGATION_PROMPT = f"""你是 ServerOpsAgent 的故障调查员，正在调�
 3. 可用修复预案清单（你只能推荐其中之一，不能发明别的动作）：
 {chr(10).join(f"   - {rb.name}: {rb.trigger}" for rb in RUNBOOKS)}
 4. 调查结束时，你的最后一条回复必须是一个 JSON 对象（不许有其他文字），形状：
-{{"root_cause": "一句话根因（区分事实与假设）",
-  "evidence": ["事实1", "事实2"],
-  "recommended_runbook": "预案名 或 null",
-  "confidence": "high|medium|low"}}
+   {{"root_cause": "...", "evidence": [...], "recommended_runbook": "预案名 或 null",
+    "confidence": "high|medium|low",
+    "suggested_action": 可选。仅当 recommended_runbook 为 null 且你认为需要修复时给出：
+      {{"description": "修复动作描述", "command": "具体 shell 命令或动作",
+       "expected_effect": "预期效果", "risk_note": "风险提示"}}，
+      否则为 null}}
 """
 
 
@@ -44,7 +46,7 @@ class Investigator:
                     {"role": "user", "content": user_message}]
         final = run_agent(self.llm, self.executor, self.registry, messages,
                           max_steps=self.max_steps)
-        # TODO(你来实现) 解析结论：
+
         #   1) 从 final 文本中提取 JSON（提示：模型可能包了 ```json 代码块，
         #      用 final[final.find("{"):final.rfind("}")+1] 兜底再 json.loads）
         #   2) 解析失败 -> 记 warning，返回 None
@@ -70,3 +72,48 @@ class Investigator:
                 logger.warning("Incident #%s 幻觉预案 %s 不在白名单,置 null", incident.id, rb_name)
                 result["recommended_runbook"] = None  # 幻觉防线:改 null,但结论照常返回
         return result  # 无论有无预案,都返回结论
+
+def _extract_trail(messages: list[dict]) -> list[dict]:
+    """从消息史提取工具调用链。只存调用与结果摘要，不存 LLM 思考。"""
+    trail = []
+    step = 0
+    for m in messages:
+        if m.get("role") == "assistant" and m.get("tool_calls"):
+            for tc in m["tool_calls"]:
+                name = tc["function"]["name"]
+                try:
+                    args = json.loads(tc["function"]["arguments"] or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                # TODO(你来实现)：
+                #   1) 找配对的结果：遍历 messages 找 role=="tool" 且
+                #      tool_call_id == tc["id"] 的消息，json.loads 其 content
+                #   2) 结果缺失 -> status="error", summary="（无结果）"
+                #   3) 有结果 -> status=result["status"],
+                #      summary=_summarize_result(result)（提炼关键字段，截断 200）
+                #   4) trail.append({...}) 并 step += 1
+                ...
+    return trail
+
+def _summarize_result(result: dict) -> str:
+    """从工具结果 dict 提炼一行摘要（关键字段白名单 + 截断 200）。"""
+    # TODO(你来实现)：
+    #   1) data = result.get("data", {})
+    #   2) 从白名单字段里挑第一个存在的: state/port_open/used_pct/error/...
+    #   3) 没有白名单字段 -> str(data)[:200]
+    ...
+
+def _validate_suggested_action(action) -> dict | None:
+    """结构化建议校验：字段齐全才保留，否则置 None（幻觉防线，同白名单思路）。"""
+    if not isinstance(action, dict):
+        return None
+    required = ("description", "command", "expected_effect")
+    if not all(action.get(k) for k in required):
+        logger.warning("suggested_action 缺字段，置 None: %s", action)
+        return None
+    if len(action.get("command", "")) > 500:
+        logger.warning("suggested_action 命令过长，置 None")
+        return None
+    return {k: action.get(k) for k in
+            ("description", "command", "expected_effect", "risk_note")
+            if action.get(k)}
