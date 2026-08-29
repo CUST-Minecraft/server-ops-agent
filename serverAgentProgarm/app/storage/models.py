@@ -1,7 +1,7 @@
 """所有数据表定义。随课程天数逐步增加（今天只有快照表）。"""
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float
+from sqlalchemy import JSON, DateTime, Float, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -29,10 +29,10 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    kind: Mapped[str] = mapped_column(index=True)     # 规则 key 或 "service_down:<name>"
-    severity: Mapped[str]                             # warning / critical
-    status: Mapped[str] = mapped_column(default="open")   # open / resolved（后续扩展）
-    title: Mapped[str]                                # 人话标题
+    kind: Mapped[str] = mapped_column(String(64), index=True)     # 规则 key 或 "service_down:<name>"
+    severity: Mapped[str] = mapped_column(String(16))             # warning / critical
+    status: Mapped[str] = mapped_column(String(16), default="open")   # open / resolved（后续扩展）
+    title: Mapped[str] = mapped_column(String(255))               # 人话标题
     detail: Mapped[dict] = mapped_column(JSON, default=dict)  # 开单时的事实快照
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -43,11 +43,11 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    tool: Mapped[str]
+    tool: Mapped[str] = mapped_column(String(64))
     args: Mapped[dict] = mapped_column(JSON, default=dict)
-    decision: Mapped[str]                      # allow / needs_approval / deny
-    reason: Mapped[str]
-    status: Mapped[str] = mapped_column(default="decided")   # decided / executed（Day 7 补）
+    decision: Mapped[str] = mapped_column(String(16))        # allow / needs_approval / deny
+    reason: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default="decided")   # decided / executed（Day 7 补）
     incident_id: Mapped[int | None] = mapped_column(nullable=True)  # Day 9 关联工单
 
 
@@ -56,17 +56,17 @@ class ApprovalRequest(Base):
     __tablename__ = "approval_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    tool: Mapped[str]
+    tool: Mapped[str] = mapped_column(String(64))
     args: Mapped[dict] = mapped_column(JSON)               # 审批时人看到的就是它
-    args_hash: Mapped[str]                                  # 防篡改绑定（见步骤 2）
-    reason: Mapped[str]                                     # 权限引擎给出的挂起理由
-    status: Mapped[str] = mapped_column(default="pending")  # pending/approved/rejected/expired
-    result_status: Mapped[str | None] = mapped_column(nullable=True)  # 执行结果（approved 后填）
+    args_hash: Mapped[str] = mapped_column(String(64))      # 防篡改绑定（见步骤 2）
+    reason: Mapped[str] = mapped_column(String(255))        # 权限引擎给出的挂起理由
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending/approved/rejected/expired
+    result_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 执行结果（approved 后填）
     incident_id: Mapped[int | None] = mapped_column(nullable=True)    # Day 9 起关联工单
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    decided_by: Mapped[str | None] = mapped_column(nullable=True)     # 审批人标识
+    decided_by: Mapped[str | None] = mapped_column(String(64), nullable=True)     # 审批人标识
 
 class RemediationRecord(Base):
     """一次修复预案执行的完整记录。状态: planned -> executing -> verified | failed。"""
@@ -74,10 +74,10 @@ class RemediationRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     incident_id: Mapped[int | None] = mapped_column(nullable=True)  # Day 9 起关联
-    runbook: Mapped[str]
+    runbook: Mapped[str] = mapped_column(String(255))
     plan: Mapped[dict] = mapped_column(JSON)
-    status: Mapped[str]  # planned/executing/verified/failed
-    exec_status: Mapped[str | None] = mapped_column(nullable=True)  # 执行结果（ToolResult.status）
+    status: Mapped[str] = mapped_column(String(16))  # planned/executing/verified/failed
+    exec_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 执行结果（ToolResult.status）
     verify_passed: Mapped[bool | None] = mapped_column(nullable=True)
     verify_evidence: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
