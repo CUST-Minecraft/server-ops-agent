@@ -1,13 +1,19 @@
 """工具执行器：执行的唯一入口。Day 6 起在这里插入权限检查与审计。"""
 import logging
 import time
+
+from app import ServerSettings
 from app.security.audit import log_decision
 from app.security.policy import Decision
 from app.tools.base import ToolResult
 from app.tools.registry import ToolRegistry
 from app.security.policy import PermissionEngine
+import json
 
 logger = logging.getLogger(__name__)
+
+MAX_OUTPUT_CHARS = ServerSettings().max_output_chars
+
 
 class ToolExecutor:
     def __init__(self,registry: ToolRegistry,policy: PermissionEngine | None = None, session_factory=None, approval_manager=None):
@@ -75,12 +81,14 @@ class ToolExecutor:
                 result.elapsed_ms = elapsed
                 return result
             if isinstance(result, dict):
-                return ToolResult(
+                final = ToolResult(
                     status="success",
                     data=result,
                     invocation=invocation,
                     elapsed_ms=elapsed
                 )
+                return self._truncate(final)
+
             return ToolResult(status="error",
                               error=f"工具返回了无法识别的类型: {type(result).__name__}",
                               invocation=invocation, elapsed_ms=elapsed)
@@ -95,3 +103,23 @@ class ToolExecutor:
                 invocation=invocation,
                 elapsed_ms=elapsed
             )
+
+
+    def _truncate(self, result: ToolResult) -> ToolResult:
+        """超长输出截断+标记。截断是有损手段，标记让 LLM 知道信息不完整。"""
+        #   text = json.dumps(result.data, ensure_ascii=False)
+        #   超过上限 -> result.data = {"_truncated": True,
+        #                              "_original_chars": len(text),
+        #                              "_preview": text[:MAX_OUTPUT_CHARS]}
+        #              并记 warning
+        text = json.dumps(result.data, ensure_ascii=False)
+        if len(text) > MAX_OUTPUT_CHARS:
+            result.data = {
+                            "_truncated": True,
+                             "_original_chars": len(text),
+                             "_preview": text[:MAX_OUTPUT_CHARS]
+            }
+
+            logger.warning("tools输出文本太长,被截断")
+            return result
+        return result

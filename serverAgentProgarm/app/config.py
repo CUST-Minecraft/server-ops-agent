@@ -16,6 +16,7 @@ class ServerSettings(BaseSettings):
     approval_ttl_minutes: int = 60 # 默认审批时间
     investigate_max_retries: int = 2
     alert_webhook_url : str | None = None
+    max_output_chars :int = 8000
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(

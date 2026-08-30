@@ -1,26 +1,60 @@
-from openai import OpenAI
+import time
+import logging
+from openai import OpenAI, APITimeoutError, APIConnectionError, RateLimitError, Stream
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
+
 from app.config import LLMSettings
 
 """构建一个可以复用的llm对象"""
+logger = logging.getLogger(__name__)
+
+def _init_llm_client(settings:LLMSettings):
+    return OpenAI(
+        api_key=settings.api_key.get_secret_value(),
+        base_url=settings.base_url,
+        timeout=100,
+    )
+
+RETRYABLE = (APITimeoutError, APIConnectionError, RateLimitError)
+MAX_RETRIES = 3
+
 class LLMClient:
     def __init__(self):
         self.settings = LLMSettings()
-        self.llm_client = self._init_llm_client(self.settings)
+        self.llm_client = _init_llm_client(self.settings)
 
-    def _init_llm_client(self,settings:LLMSettings):
-        return OpenAI(
-            api_key=settings.api_key.get_secret_value(),
-            base_url=settings.base_url,
-            timeout=100,
-        )
+    def chat(self, messages, tools=None)-> None | ChatCompletion | Stream[ChatCompletionChunk]:
+        """调用 LLM。瞬时故障指数退避重试；不可重试错误立即抛出。"""
+        #   for attempt in range(MAX_RETRIES + 1):
+        #       try:
+        #           （原调用逻辑，timeout 从 100 调成 30）
+        #       except RETRYABLE as e:
+        #           if attempt == MAX_RETRIES: raise
+        #           wait = 2 ** attempt          # 1s -> 2s -> 4s
+        #           logger.warning("LLM 瞬时错误(第%s次重试, 等待%ss): %s", attempt+1, wait, e)
+        #           time.sleep(wait)
+        #   （认证错/参数错不捕获，第一次就直接抛给调用方）
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                kwargs = dict(messages=messages, model=self.settings.model_id)
+                if tools:
+                    kwargs["tools"] = tools
+                response = self.llm_client.chat.completions.create(**kwargs, timeout=20)
+                return response
+            except RETRYABLE as e:
+                if attempt == MAX_RETRIES: raise
+                wait = 2 ** attempt
+                logger.warning("LLM 瞬时错误(第%s次重试, 等待%ss): %s", attempt + 1, wait, e)
+                time.sleep(wait)
+
 
     # 单纯连通性测试,无工具无提示词,单纯只是一个回复agent
-    def chat(self,message:list[dict],tools:list[dict] | None = None) -> dict:
-        kwargs = dict(messages=message,model=self.settings.model_id)
-        if tools:
-            kwargs["tools"] = tools
-        response = self.llm_client.chat.completions.create(**kwargs)
-        return response
+    # def chat(self,message:list[dict],tools:list[dict] | None = None) -> dict:
+    #     kwargs = dict(messages=message,model=self.settings.model_id)
+    #     if tools:
+    #         kwargs["tools"] = tools
+    #     response = self.llm_client.chat.completions.create(**kwargs)
+    #     return response
 
 
 def get_test():
