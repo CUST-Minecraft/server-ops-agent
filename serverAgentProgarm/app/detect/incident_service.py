@@ -62,7 +62,6 @@ class IncidentService:
 
     def update_status(self, incident_id: int, new_status: str,
                       note: str = "") -> bool:
-        # TODO(你来实现)：
         #   1) 查单；new_status 不在 ALLOWED_TRANSITIONS[当前状态] 里 -> 记 warning 并返回 False
         #   2) 合法 -> 更新 status；resolved 时补 resolved_at
         #   3) 调查结论等附加信息写进 detail（note 拼进 detail["notes"] 列表）

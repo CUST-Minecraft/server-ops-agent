@@ -71,7 +71,10 @@ class Investigator:
             if rb_name not in valid_names:
                 logger.warning("Incident #%s 幻觉预案 %s 不在白名单,置 null", incident.id, rb_name)
                 result["recommended_runbook"] = None  # 幻觉防线:改 null,但结论照常返回
-        return result  # 无论有无预案,都返回结论
+
+        result["trail"] = _extract_trail(messages)
+        result["suggested_action"] = _validate_suggested_action(result.get("suggested_action"))
+        return result
 
 def _extract_trail(messages: list[dict]) -> list[dict]:
     """从消息史提取工具调用链。只存调用与结果摘要，不存 LLM 思考。"""
@@ -85,7 +88,6 @@ def _extract_trail(messages: list[dict]) -> list[dict]:
                     args = json.loads(tc["function"]["arguments"] or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                # TODO(你来实现)：
                 #   1) 找配对的结果：遍历 messages 找 role=="tool" 且
                 #      tool_call_id == tc["id"] 的消息，json.loads 其 content
                 #   2) 结果缺失 -> status="error", summary="（无结果）"
@@ -98,12 +100,10 @@ def _extract_trail(messages: list[dict]) -> list[dict]:
                         matched = tm
                         break
                 if matched is None:
-                    # TODO 第 2 点：没找到 -> error
                     status, summary = "error", "（无结果）"
                 else:
-                    # TODO 第 3 点：找到了 -> 解析 content
                     try:
-                        result = json.loads(matched["content"] or {})  # content 也是 JSON 字符串
+                        result = json.loads(matched["content"])  # content 也是 JSON 字符串
                         status = result.get("status", "unknown")
                         summary = _summarize_result(result)  # 提炼摘要（下一个函数）
                     except json.JSONDecodeError:
@@ -122,7 +122,6 @@ def _extract_trail(messages: list[dict]) -> list[dict]:
 
 def _summarize_result(result: dict) -> str:
     """从工具结果 dict 提炼一行摘要（关键字段白名单 + 截断 200）。"""
-    # TODO(你来实现)：
     #   1) data = result.get("data", {})
     #   2) 从白名单字段里挑第一个存在的: state/port_open/used_pct/error/...
     #   3) 没有白名单字段 -> str(data)[:200]

@@ -8,6 +8,12 @@ export function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+export function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return `${fmtDate(d)} ${fmtClock(d)}`
+}
+
 export function relTime(iso: string, now: Date = new Date()): string {
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return iso

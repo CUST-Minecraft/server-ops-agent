@@ -2,7 +2,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from app.storage.db import SessionLocal, init_db
@@ -78,6 +78,18 @@ def reject_action(approval_id: int):
     _, _, approvals = build_executor_and_approvals()
     msg = approvals.reject(approval_id, actor="web")  # 返回字符串（与 CLI 相同）
     return {"ok": True, "message": msg}
+
+
+@app.get("/api/incidents/{incident_id}")
+def api_incident_detail(incident_id: int):
+    with SessionLocal() as s:
+        inc = s.get(Incident, incident_id)
+        if inc is None:
+            raise HTTPException(404, "单子不存在")
+        detail = inc.detail or {}
+    return {"inc": _to_dict(inc),
+            "history": detail.get("investigation_history", []),   # 每次调查（含重试）
+            "notes": detail.get("notes", [])}
 
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"

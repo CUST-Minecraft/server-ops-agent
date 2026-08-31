@@ -3,27 +3,73 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import TabNav from './components/TabNav.vue'
 import OverviewView from './components/OverviewView.vue'
 import IncidentsView from './components/IncidentsView.vue'
+import IncidentDetailView from './components/IncidentDetailView.vue'
 import ApprovalsView from './components/ApprovalsView.vue'
+import LoginView from './components/LoginView.vue'
 import Clock from './components/Clock.vue'
 import MascotGif from './components/MascotGif.vue'
-import { toastState } from './toast'
+import { toastState, toast } from './toast'
+import { getUsername, clearSession, api, AUTH_EVENT } from './api'
 
-type Route = 'overview' | 'incidents' | 'approvals'
+type Route =
+  | { name: 'overview' | 'incidents' | 'approvals' | 'login' }
+  | { name: 'detail'; id: string }
 
-const route = ref<Route>('overview')
+const route = ref<Route>({ name: 'overview' })
+const username = ref(getUsername())
 
-const ROUTES: Route[] = ['overview', 'incidents', 'approvals']
+const TAB_NAMES = ['overview', 'incidents', 'approvals'] as const
 
 function parseHash(): void {
   const h = location.hash.replace(/^#\/?/, '').split('?')[0]
-  route.value = (ROUTES as string[]).includes(h) ? (h as Route) : 'overview'
+  if (h === 'login') {
+    route.value = { name: 'login' }
+    return
+  }
+  const m = h.match(/^incidents\/(\d+)$/)
+  if (m) {
+    route.value = { name: 'detail', id: m[1] }
+    return
+  }
+  if ((TAB_NAMES as readonly string[]).includes(h)) {
+    route.value = { name: h as 'overview' | 'incidents' | 'approvals' }
+    return
+  }
+  route.value = { name: 'overview' }
+}
+
+function tabActive(): string {
+  return route.value.name === 'detail' ? 'incidents' : route.value.name
+}
+
+function onAuth(e: Event): void {
+  const msg = (e as CustomEvent<{ msg: string }>).detail?.msg
+  username.value = null
+  if (msg) toast(msg, 'info')
+  if (route.value.name !== 'login') window.location.hash = '#/login'
+}
+
+async function doLogout(): Promise<void> {
+  try {
+    await api.logout()
+  } catch {
+    /* 后端未实现登出时忽略，本地会话照清 */
+  }
+  clearSession()
+  username.value = null
+  toast('已登出', 'info')
+  window.location.hash = '#/login'
 }
 
 onMounted(() => {
   parseHash()
   window.addEventListener('hashchange', parseHash)
+  window.addEventListener(AUTH_EVENT, onAuth)
 })
-onUnmounted(() => window.removeEventListener('hashchange', parseHash))
+onUnmounted(() => {
+  window.removeEventListener('hashchange', parseHash)
+  window.removeEventListener(AUTH_EVENT, onAuth)
+})
 </script>
 
 <template>
@@ -34,17 +80,28 @@ onUnmounted(() => window.removeEventListener('hashchange', parseHash))
         <span class="brand-name">ServerOps<span class="brand-accent">Agent</span></span>
         <span class="brand-sub">值班台 ✦</span>
       </a>
-      <TabNav :route="route" />
+      <TabNav :route="tabActive()" />
       <div class="topbar-right">
+        <template v-if="username">
+          <span class="who num">👤 {{ username }}</span>
+          <button class="btn mini" @click="void doLogout()">登出</button>
+        </template>
+        <a v-else class="btn mini" href="#/login">登录</a>
         <Clock />
       </div>
     </header>
 
     <main class="stage">
       <Transition name="view" mode="out-in">
-        <component :is="route === 'overview' ? OverviewView
-          : route === 'incidents' ? IncidentsView
-          : ApprovalsView" :key="route" />
+        <component
+          :is="route.name === 'overview' ? OverviewView
+            : route.name === 'incidents' ? IncidentsView
+            : route.name === 'approvals' ? ApprovalsView
+            : route.name === 'login' ? LoginView
+            : IncidentDetailView"
+          :key="route.name === 'detail' ? `detail-${route.id}` : route.name"
+          :incident-id="route.name === 'detail' ? route.id : undefined"
+        />
       </Transition>
     </main>
 
@@ -126,6 +183,40 @@ onUnmounted(() => window.removeEventListener('hashchange', parseHash))
 .topbar-right {
   margin-left: auto;
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.who {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--teal-deep);
+}
+
+.btn.mini {
+  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--ink-dim);
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--line-strong);
+  transition: all 0.15s ease;
+  position: relative;
+  top: 0;
+  text-decoration: none;
+}
+.btn.mini:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--line-strong);
+  color: var(--pink-deep);
+  border-color: var(--pink);
+}
+.btn.mini:active {
+  top: 2px;
+  box-shadow: 0 1px 0 var(--line-strong);
 }
 
 .stage {

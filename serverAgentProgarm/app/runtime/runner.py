@@ -2,7 +2,7 @@
 import copy
 import logging
 import time
-
+from datetime import datetime, timezone
 from app import setup_logging
 from app.alert import Alerter
 from app.config import ServerSettings, ThresholdSettings
@@ -147,13 +147,25 @@ def _handle_open(inc_id: int, incident_service: IncidentService,
         return
 
     # 调查成功
+
+    history = copy.deepcopy(inc.detail.get("investigation_history", []))
+
+    # 追加本次调查（结论含 trail / suggested_action）
+    history.append({
+        "attempt": len(history) + 1,
+        "at": datetime.now(timezone.utc).isoformat(),
+        "conclusion": conclusion,
+    })
+    history = history[-10:]                    # 上限保护：最多 10 条，超出丢最旧
+
+
     rb_name = conclusion.get("recommended_runbook")
     root_cause = conclusion.get("root_cause", "")
 
     if rb_name is None:
         # 无推荐预案（查不清/不需要修）：计一次重试，超上限则 failed（防无限循环）
         retry += 1
-        _write_detail(inc_id, {"investigation": conclusion,
+        _write_detail(inc_id, {"investigation_history": history,
                                "investigate_retry_count": retry})
         if retry >= settings.investigate_max_retries:
             incident_service.update_status(inc_id, "failed",
@@ -167,8 +179,8 @@ def _handle_open(inc_id: int, incident_service: IncidentService,
                         inc_id, retry)
         return
 
-    # 有预案：结论写回 detail，重置重试计数
-    _write_detail(inc_id, {"investigation": conclusion, "investigate_retry_count": 0})
+    # 有预案：history 写回 detail，重置重试计数
+    _write_detail(inc_id, {"investigation_history": history, "investigate_retry_count": 0})
 
     # 有推荐预案：找到 RUNBOOKS 里对应的项
     rb = next((r for r in RUNBOOKS if r.name == rb_name), None)
