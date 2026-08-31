@@ -36,9 +36,8 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, registry: ToolRegistry,
             messages.append({"role": "assistant", "content": message.content or ""})
             return message.content or "（模型没有返回内容）"
 
-        # ---- TODO(你来实现) 模型举手：两步 ----
         #
-        # TODO 1：把带 tool_calls 的 assistant 消息入史。形状（协议规定，照抄即可）：
+        # 把带 tool_calls 的 assistant 消息入史。形状（协议规定，照抄即可）：
         messages.append({
               "role": "assistant",
               "content": message.content or "",
@@ -48,7 +47,6 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, registry: ToolRegistry,
                              for tc in message.tool_calls],
         })
 
-        # TODO 2：逐个执行并回填。对 message.tool_calls 里的每个 tc：
         for tc in message.tool_calls :
             try:
                 args = json.loads(tc.function.arguments or "{}")
