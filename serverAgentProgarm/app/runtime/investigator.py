@@ -92,8 +92,33 @@ def _extract_trail(messages: list[dict]) -> list[dict]:
                 #   3) 有结果 -> status=result["status"],
                 #      summary=_summarize_result(result)（提炼关键字段，截断 200）
                 #   4) trail.append({...}) 并 step += 1
-                ...
+                matched = None
+                for tm in messages:
+                    if tm.get("role") == "tool" and tm.get("tool_call_id") == tc["id"]:
+                        matched = tm
+                        break
+                if matched is None:
+                    # TODO 第 2 点：没找到 -> error
+                    status, summary = "error", "（无结果）"
+                else:
+                    # TODO 第 3 点：找到了 -> 解析 content
+                    try:
+                        result = json.loads(matched["content"] or {})  # content 也是 JSON 字符串
+                        status = result.get("status", "unknown")
+                        summary = _summarize_result(result)  # 提炼摘要（下一个函数）
+                    except json.JSONDecodeError:
+                        status, summary = "error", "<UNK>"
+                trail.append({
+                    "step": step,
+                    "tool": name,
+                    "args": args,
+                    "status": status,
+                    "summary": summary,
+                })
+                step += 1
+
     return trail
+
 
 def _summarize_result(result: dict) -> str:
     """从工具结果 dict 提炼一行摘要（关键字段白名单 + 截断 200）。"""
@@ -101,7 +126,8 @@ def _summarize_result(result: dict) -> str:
     #   1) data = result.get("data", {})
     #   2) 从白名单字段里挑第一个存在的: state/port_open/used_pct/error/...
     #   3) 没有白名单字段 -> str(data)[:200]
-    ...
+    data = result.get("data",{})
+    return str(data)[:200]
 
 def _validate_suggested_action(action) -> dict | None:
     """结构化建议校验：字段齐全才保留，否则置 None（幻觉防线，同白名单思路）。"""
