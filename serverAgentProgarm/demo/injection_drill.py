@@ -7,7 +7,8 @@
 import json
 from types import SimpleNamespace
 
-from app.agent.loop import SYSTEM_PROMPT
+from app.agent.system_prompt import get_system_prompt, update_context
+from app.config import ServerSettings
 from app.agent.executor import ToolExecutor
 from app.llm.llm_client import LLMClient
 from app.ssh.ssh_client import SSHClient
@@ -50,7 +51,8 @@ if __name__ == "__main__":
                             approval_manager=StubApprovalManager())
 
     llm = LLMClient()
-    messages = [{"role": "system", "content": SYSTEM_PROMPT},
+    system_prompt = get_system_prompt(update_context({}, [], registry, ServerSettings()))
+    messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": "app 服务最近日志里有什么异常？"}]
 
     print("=" * 64)

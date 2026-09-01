@@ -93,12 +93,15 @@ def chat():
     from app.runtime_deps import build_executor_and_approvals
     from app.agent.loop import run_agent
     from app.llm.llm_client import LLMClient
-    from app.agent.loop import SYSTEM_PROMPT
+    from app.agent.system_prompt import get_system_prompt, update_context
+    from app.config import ServerSettings
 
     # 已给：对话循环与 Day 3 demo/agent_chat 相同，装配换 runtime_deps
     executor, registry, approval = build_executor_and_approvals()
     llm = LLMClient()
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = get_system_prompt(update_context({}, [], registry, ServerSettings()))
+
+    messages = [{"role": "system", "content": system_prompt}]
     print("ServerOpsAgent 已就绪（输入 q 退出）。试试：服务器资源状况如何？")
 
     while True:

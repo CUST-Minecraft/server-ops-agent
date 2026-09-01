@@ -3,6 +3,7 @@ import json
 import logging
 from app.agent.executor import ToolExecutor
 from app.agent.loop import run_agent
+from app.agent.memory import load_memories_for_incident
 from app.llm.llm_client import LLMClient
 from app.remediation.runbooks import RUNBOOKS
 from app.storage.models import Incident
@@ -37,10 +38,12 @@ class Investigator:
 
     def investigate(self, incident: Incident) -> dict | None:
         """调查一张单子。返回结论 dict；解析失败/超步返回 None（调用方决定重试）。"""
+        memories = load_memories_for_incident(incident)  # 用 kind/title/detail 做 query
         user_message = (
-            f"工单 #{incident.id}: {incident.title}\n"
-            f"开单事实: {json.dumps(incident.detail, ensure_ascii=False)}\n"
-            f"请调查并给出结论 JSON。"
+                f"工单 #{incident.id}: {incident.title}\n"
+                f"开单事实: {json.dumps(incident.detail, ensure_ascii=False)}\n"
+                + (f"历史相关经验:\n{memories}\n" if memories else "")
+                + "请调查并给出结论 JSON。"
         )
         messages = [{"role": "system", "content": INVESTIGATION_PROMPT},
                     {"role": "user", "content": user_message}]
