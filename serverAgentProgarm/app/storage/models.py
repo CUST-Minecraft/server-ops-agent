@@ -77,7 +77,7 @@ class RemediationRecord(Base):
     runbook: Mapped[str] = mapped_column(String(255))
     plan: Mapped[dict] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(16))  # planned/executing/verified/failed
-    exec_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 执行结果（ToolResult.status）
+    exec_status: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 执行结果（ToolResult.status）
     verify_passed: Mapped[bool | None] = mapped_column(nullable=True)
     verify_evidence: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

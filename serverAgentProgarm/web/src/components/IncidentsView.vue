@@ -27,6 +27,10 @@ onMounted(() => {
   timer = window.setInterval(() => void load(), 30000)
 })
 onUnmounted(() => window.clearInterval(timer))
+
+function openDetail(id: number): void {
+  window.location.hash = `#/incidents/${id}`
+}
 </script>
 
 <template>
@@ -64,8 +68,8 @@ onUnmounted(() => window.clearInterval(timer))
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(i, idx) in incidents" :key="i.id" class="trow rise" :style="{ animationDelay: `${0.04 + idx * 0.025}s` }">
-            <td class="td-id num"><a class="inc-link" :href="`#/incidents/${i.id}`">#{{ i.id }}</a></td>
+          <tr v-for="(i, idx) in incidents" :key="i.id" class="trow rise" :style="{ animationDelay: `${0.04 + idx * 0.025}s` }" @click="openDetail(i.id)">
+            <td class="td-id num">#{{ i.id }}</td>
             <td><span class="pill" :class="i.status">{{ i.status }}</span></td>
             <td><span class="tag" :class="i.severity">{{ i.severity }}</span></td>
             <td class="td-title">{{ i.title }}</td>
@@ -132,10 +136,15 @@ onUnmounted(() => window.clearInterval(timer))
 
 .trow {
   transition: background 0.15s ease;
+  cursor: pointer;
 }
 
 .trow:hover {
   background: var(--panel-2);
+}
+
+.trow:hover .td-id {
+  color: var(--pink-deep);
 }
 
 .trow:last-child td {
@@ -151,20 +160,7 @@ onUnmounted(() => window.clearInterval(timer))
   font-size: 12px;
   font-weight: 500;
   color: var(--teal);
-}
-
-.inc-link {
-  color: var(--teal-deep);
-  text-decoration: none;
-  border-bottom: 1.5px dashed transparent;
-  padding: 2px 4px;
-  border-radius: 6px;
-  transition: all 0.15s ease;
-}
-.inc-link:hover {
-  color: var(--pink-deep);
-  background: var(--pink-soft);
-  border-bottom-color: var(--pink);
+  transition: color 0.15s ease;
 }
 
 .th-title,

@@ -40,6 +40,17 @@ function confClass(conf?: string): string {
 function hasAction(h: InvestigationEntry): boolean {
   return !!h.conclusion.suggested_action && !!h.conclusion.suggested_action!.command
 }
+
+/* 折叠轨迹：用 Vue 显式状态控制 open，绕开 TransitionGroup 对 <details> 的干扰 */
+const openTrails = ref<Record<number, boolean>>({})
+
+function toggleTrail(attempt: number): void {
+  openTrails.value = { ...openTrails.value, [attempt]: !openTrails.value[attempt] }
+}
+
+function isTrailOpen(attempt: number): boolean {
+  return !!openTrails.value[attempt]
+}
 </script>
 
 <template>
@@ -145,12 +156,13 @@ function hasAction(h: InvestigationEntry): boolean {
           </div>
 
           <!-- 折叠轨迹 -->
-          <details v-if="h.conclusion.trail && h.conclusion.trail.length" class="trail">
-            <summary class="trail-summary num">
-              <span class="trail-caret"></span>
+          <div v-if="h.conclusion.trail && h.conclusion.trail.length" class="trail">
+            <button type="button" class="trail-summary num" @click="toggleTrail(h.attempt)">
+              <span class="trail-caret" :class="{ open: isTrailOpen(h.attempt) }"></span>
               调查轨迹（{{ h.conclusion.trail.length }} 步）
-            </summary>
-            <div class="trail-table-wrap">
+              <span class="trail-toggle num">{{ isTrailOpen(h.attempt) ? '收起' : '展开' }}</span>
+            </button>
+            <div v-if="isTrailOpen(h.attempt)" class="trail-table-wrap">
               <table class="trail-table">
                 <thead>
                   <tr>
@@ -172,7 +184,7 @@ function hasAction(h: InvestigationEntry): boolean {
                 </tbody>
               </table>
             </div>
-          </details>
+          </div>
         </div>
       </TransitionGroup>
     </template>
@@ -494,14 +506,19 @@ function hasAction(h: InvestigationEntry): boolean {
   font-weight: 700;
   color: var(--teal-deep);
   cursor: pointer;
-  list-style: none;
   display: flex;
   align-items: center;
   gap: 8px;
   user-select: none;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  width: 100%;
+  text-align: left;
+  font-family: var(--round);
 }
-.trail-summary::-webkit-details-marker {
-  display: none;
+.trail-summary:hover {
+  color: var(--pink-deep);
 }
 
 .trail-caret {
@@ -511,9 +528,26 @@ function hasAction(h: InvestigationEntry): boolean {
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
   transition: transform 0.18s ease;
+  flex: none;
 }
-.trail[open] .trail-caret {
+.trail-caret.open {
   transform: rotate(90deg);
+}
+
+.trail-toggle {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 9px;
+  transition: all 0.15s ease;
+}
+.trail-summary:hover .trail-toggle {
+  color: var(--pink-deep);
+  border-color: var(--pink);
 }
 
 .trail-table-wrap {
