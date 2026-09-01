@@ -5,6 +5,7 @@ import OverviewView from './components/OverviewView.vue'
 import IncidentsView from './components/IncidentsView.vue'
 import IncidentDetailView from './components/IncidentDetailView.vue'
 import ApprovalsView from './components/ApprovalsView.vue'
+import ChatView from './components/ChatView.vue'
 import LoginView from './components/LoginView.vue'
 import Clock from './components/Clock.vue'
 import MascotGif from './components/MascotGif.vue'
@@ -12,13 +13,13 @@ import { toastState, toast } from './toast'
 import { getUsername, clearSession, api, AUTH_EVENT } from './api'
 
 type Route =
-  | { name: 'overview' | 'incidents' | 'approvals' | 'login' }
+  | { name: 'overview' | 'incidents' | 'approvals' | 'chat' | 'login' }
   | { name: 'detail'; id: string }
 
 const route = ref<Route>({ name: 'overview' })
 const username = ref(getUsername())
 
-const TAB_NAMES = ['overview', 'incidents', 'approvals'] as const
+const TAB_NAMES = ['overview', 'incidents', 'approvals', 'chat'] as const
 
 function parseHash(): void {
   const h = location.hash.replace(/^#\/?/, '').split('?')[0]
@@ -32,7 +33,7 @@ function parseHash(): void {
     return
   }
   if ((TAB_NAMES as readonly string[]).includes(h)) {
-    route.value = { name: h as 'overview' | 'incidents' | 'approvals' }
+    route.value = { name: h as 'overview' | 'incidents' | 'approvals' | 'chat' }
     return
   }
   route.value = { name: 'overview' }
@@ -97,6 +98,7 @@ onUnmounted(() => {
           :is="route.name === 'overview' ? OverviewView
             : route.name === 'incidents' ? IncidentsView
             : route.name === 'approvals' ? ApprovalsView
+            : route.name === 'chat' ? ChatView
             : route.name === 'login' ? LoginView
             : IncidentDetailView"
           :key="route.name === 'detail' ? `detail-${route.id}` : route.name"

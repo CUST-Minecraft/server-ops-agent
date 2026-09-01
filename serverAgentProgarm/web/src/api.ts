@@ -165,6 +165,107 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/* —— Web Chat（Day 14）：SSE 流式 + 对话历史落库 —— */
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ChatHistoryPayload {
+  messages: ChatMessage[]
+}
+
+const SESSION_KEY = 'soa_chat_session'
+
+export function chatSessionId(): string {
+  let id = localStorage.getItem(SESSION_KEY)
+  if (!id) {
+    id = `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem(SESSION_KEY, id)
+  }
+  return id
+}
+
+export function chatHistory(): Promise<ChatHistoryPayload> {
+  return get<ChatHistoryPayload>(
+    `/api/chat/messages?session_id=${encodeURIComponent(chatSessionId())}`,
+  )
+}
+
+export interface ChatStreamHandlers {
+  onDelta: (text: string) => void
+  onDone: () => void
+  onError: (message: string) => void
+}
+
+/* SSE 流式问答：data: {content} 逐块推进，遇 done / [DONE] / 流关闭即结束。 */
+export async function chatStream(
+  messages: ChatMessage[],
+  handlers: ChatStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch(`${BASE}/api/chat/stream`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ session_id: chatSessionId(), messages }),
+      signal,
+    })
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') handlers.onError(e instanceof Error ? e.message : String(e))
+    return
+  }
+  if (res.status === 401) {
+    handle401('/api/chat/stream')
+    handlers.onError('未登录或登录已过期')
+    return
+  }
+  if (!res.ok) {
+    handlers.onError((await bodyDetail(res)) ?? `HTTP ${res.status}`)
+    return
+  }
+  const reader = res.body?.getReader()
+  if (!reader) {
+    handlers.onError('响应流不可读')
+    return
+  }
+  const decoder = new TextDecoder()
+  let buf = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let sep: number
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, sep)
+        buf = buf.slice(sep + 2)
+        const line = raw.split('\n').find((l) => l.startsWith('data:'))
+        if (!line) continue
+        const payload = line.slice(5).trim()
+        if (!payload || payload === '[DONE]') {
+          handlers.onDone()
+          continue
+        }
+        try {
+          const obj = JSON.parse(payload)
+          if (typeof obj.content === 'string') handlers.onDelta(obj.content)
+          else if (typeof obj.error === 'string') handlers.onError(obj.error)
+          else if (obj.done) handlers.onDone()
+        } catch {
+          handlers.onDelta(payload)
+        }
+      }
+    }
+    handlers.onDone()
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') handlers.onError(e instanceof Error ? e.message : String(e))
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 export const api = {
   status: () => get<StatusPayload>('/api/status'),
   incidents: () => get<IncidentsPayload>('/api/incidents'),

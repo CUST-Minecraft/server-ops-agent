@@ -5,6 +5,7 @@ const tabs = [
   { key: 'overview', label: '总览', href: '#/' },
   { key: 'incidents', label: '工单', href: '#/incidents' },
   { key: 'approvals', label: '审批', href: '#/approvals' },
+  { key: 'chat', label: '对话', href: '#/chat' },
 ]
 </script>
 
