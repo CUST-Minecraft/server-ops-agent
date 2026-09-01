@@ -28,6 +28,9 @@ data/
 # ===== 前端构建产物（npm run build 生成，不入库） =====
 static/
 
+# ===== Agent 记忆（运行时生成，随对话沉淀） =====
+.memory/
+
 # ===== 工具与系统 =====
 .idea/
 .vscode/

@@ -1,4 +1,11 @@
+import json
 from pathlib import Path
+from app.llm.llm_client import LLMClient
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 
 MEMORY_DIR = Path(".memory")    # 项目根下的 .memory/（demo 与 CLI 的工作目录都是项目根）
 
@@ -67,3 +74,75 @@ def _rebuild_index() -> None:
             continue                   # 无 frontmatter 的文件跳过（一行坏文件不崩整个重建）
         lines.append(f"- [{fm.get('name', f.stem)}]({f.name}) — {fm.get('description', '')}")
     (MEMORY_DIR / "MEMORY.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def format_recent_messages(messages: list[dict]) -> str:
+    """把消息列表拼成纯文本对话（提取/选记忆的 prompt 用；步骤 4 也复用）。"""
+    return "\n".join(f"{m['role']}: {m['content']}" for m in messages)
+
+def extract_memories(messages: list[dict]) -> int:
+    """从最近对话提取新记忆，返回写入条数。LLM 失败返回 0，不阻塞主流程。"""
+    dialogue = format_recent_messages(messages[-10:])
+    existing = "\n".join(f"- {m.get('name')}: {m.get('description')}" for m in list_memory_files())
+    prompt = (
+        "从对话中提取值得长期记住的运维信息。\n"
+        "类型: operator(值班人偏好)/server(服务器特性)/incident_lesson(故障经验)/runbook_hint(排查线索)\n"
+        "返回 JSON 数组: [{name, type, description, body}]。没有新信息或已覆盖则返回 []。\n\n"
+        f"已有记忆:\n{existing}\n\n对话:\n{dialogue[:4000]}"
+    )
+    # TODO(你来实现)：
+    #   1) 调 LLM 拿 JSON（复用 llm_client 或直接 openai SDK）
+    #   2) json.loads 失败 / 非数组 -> 记 warning 返回 0
+    #   3) 逐条校验: name/type 非空、type 在 VALID_TYPES、已有记忆没覆盖（防重）
+    #   4) write_memory_file(...) 并计数；logger.info("[Memory: extracted N new memories]")
+    try:
+        llm = LLMClient()
+        response = llm.chat(messages=[{"role": "user", "content": prompt}]).choices[0].message.content
+    except Exception as e:
+        logger.warning(f"llm调用出现错误,{e}")
+        return 0
+
+    try:
+        results : list[dict] = json.loads(response)
+    except json.JSONDecodeError as e:
+        logger.warning(f"记忆反序列化失败,{e},总结失败,返回null")
+        results = []
+        return 0
+
+    memory_len = 0
+    if not isinstance(results, list):
+        logger.warning("返回结果非数组,解析错误")
+        return 0
+
+    if not response:  # None / 空串直接走失败分支
+        logger.warning("LLM 返回空内容,跳过记忆提取")
+        return 0
+
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        if result.get("name") is None:
+            continue
+        if result.get("type") not in VALID_TYPES:
+            continue
+        name = result.get("name")
+        # 万一llm抽风,防御性措施
+        if not isinstance(name, str) or not name:
+            continue
+
+        slug = name.lower().replace(" ", "-")
+        if (MEMORY_DIR / f"{slug}.md").exists():
+            continue
+        write_memory_file(name=result.get("name"),mem_type=result.get("type"),description=result.get("description",""),body=result.get("body",""))
+        memory_len += 1
+    logger.info("[Memory: extracted %d new memories]",memory_len)
+    return memory_len
+
+
+
+
+
+
+
+
+
