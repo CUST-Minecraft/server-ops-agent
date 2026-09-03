@@ -18,6 +18,7 @@ class ServerSettings(BaseSettings):
     alert_webhook_url : str | None = None
     max_output_chars :int = 8000
     memory_consolidate_threshold: int = 10    # 记忆文件数达到此值触发整理（步骤7）
+    compact_token_threshold: int = 24000      # 估算 token 超此值触发 L4 摘要（Day14 步骤1）
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(

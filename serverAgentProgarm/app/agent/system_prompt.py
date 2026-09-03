@@ -27,7 +27,7 @@ def assemble_system_prompt(context: dict) -> str:
 
 _last_key, _last_prompt = None, None
 
-def get_system_prompt(context: dict) -> str:
+def get_system_prompt(context: dict) -> str | None:
     """确定性序列化检测变化，未变命中缓存。"""
     global _last_key, _last_prompt
     key = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)

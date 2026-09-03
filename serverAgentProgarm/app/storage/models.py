@@ -1,7 +1,7 @@
 """所有数据表定义。随课程天数逐步增加（今天只有快照表）。"""
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, String
+from sqlalchemy import JSON, DateTime, Float, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -86,3 +86,13 @@ class RemediationRecord(Base):
         """调试友好：print / 日志里直接可读，而不是 <ApprovalRequest object at 0x...>。"""
         return (f"ApprovalRequest(id={self.id}, tool={self.tool!r}, "
                 f"args={self.args!r}, status={self.status!r})")
+
+
+# 对话历史落库（CLI 与 Web 共用同一张表，设计见 memory-chat-design §4.5）
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(64), index=True)   # 区分会话
+    role: Mapped[str] = mapped_column(String(16))                     # user / assistant
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

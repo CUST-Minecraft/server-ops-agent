@@ -94,14 +94,17 @@ def chat():
     from app.agent.loop import run_agent
     from app.llm.llm_client import LLMClient
     from app.agent.system_prompt import get_system_prompt, update_context
+    from app.agent.memory import load_memories
     from app.config import ServerSettings
 
     # 已给：对话循环与 Day 3 demo/agent_chat 相同，装配换 runtime_deps
     executor, registry, approval = build_executor_and_approvals()
     llm = LLMClient()
-    system_prompt = get_system_prompt(update_context({}, [], registry, ServerSettings()))
+    settings = ServerSettings()
+    context = {}
 
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = [{"role": "system",
+                 "content": get_system_prompt(update_context(context, [], registry, settings))}]
     print("ServerOpsAgent 已就绪（输入 q 退出）。试试：服务器资源状况如何？")
 
     while True:
@@ -109,7 +112,12 @@ def chat():
         if user_input.strip() in ["q" , "quit" , "exit"]:
             break
         messages.append({"role": "user", "content": user_input})
-        answer = run_agent(llm,executor,registry,messages)
+        # 记忆正文注入当前 turn（索引只在启动时进 SYSTEM，会话内新信息靠上下文承载）
+        memories = load_memories(messages)
+        if memories:
+            messages[-1] = {**messages[-1],
+                            "content": f"[相关记忆]\n{memories}\n\n{messages[-1]['content']}"}
+        answer = run_agent(llm,executor,registry,messages,context={})
         print(answer)
 
 
