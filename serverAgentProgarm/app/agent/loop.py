@@ -32,14 +32,16 @@ def run_agent(llm: LLMClient, executor: ToolExecutor, registry: ToolRegistry,
         # 压缩前快照：L4 会把历史吞成一条摘要，提取必须用完整历史（防丢）
         pre_compress = list(messages) if context is not None else None
         if context is not None:
-            messages[:] = snip_compact(messages)     # L1（0 API）
-            messages[:] = micro_compact(messages)    # L2（0 API）
-            if estimate_token_count(messages) > settings.compact_token_threshold:
-                head = messages[:1]                  # 保住 system 段，别被摘要吃掉
-                try:
-                    messages[:] = head + compact_history(messages[1:])   # L4（1 API）
-                except Exception as e:               # 熔断/摘要失败：L1/L2 已跑，带现有历史继续
-                    logger.warning("[compact] L4 不可用，本轮跳过: %s", e)
+            messages[:] = snip_compact(messages)                        # L1：每轮，>50 才动（0 API）
+            if estimate_token_count(messages) > settings.compact_token_threshold:   # 压力门
+                target = int(settings.compact_token_threshold * 0.8)
+                messages[:] = micro_compact(messages, target_tokens=target)        # L2：门内，0 API，有 target 停
+                if estimate_token_count(messages) > settings.compact_token_threshold:
+                    head = messages[:1]              # 保住 system 段，别被摘要吃掉
+                    try:
+                        messages[:] = head + compact_history(messages[1:])   # L4：还超才摘要（1 API）
+                    except Exception as e:           # 熔断/摘要失败：L1/L2 已跑，带现有历史继续
+                        logger.warning("[compact] L4 不可用，本轮跳过: %s", e)
 
         try:
             response = llm.chat(messages, tools=registry.schemas())

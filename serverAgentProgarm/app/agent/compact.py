@@ -36,17 +36,32 @@ def snip_compact(messages, max_messages=50):
                 tail_start - head_end, len(messages), head_end + 1 + (len(messages) - tail_start))
     return messages[:head_end] + [placeholder] + messages[tail_start:]
 
-# L2: 只留最近 3 条 tool_result 完整，更旧的替换为占位符
+# L2: 只留最近 3 条"已消费"的 tool_result 完整，更旧的替换为占位符
+# （s08 适配：关在压力门后跑 + 有 target 提前停 + 排除模型还没读过的"未读"批次）
 KEEP_RECENT_TOOL_RESULTS = 3
 
-def micro_compact(messages):
+def _unseen_tool_result_indices(messages: list[dict]) -> set[int]:
+    """模型还没读过的一批 tool_result——最后一条 assistant 之后追加的。
+    这些是即将随本次 llm.chat 发出去的，不能占位（否则模型还没看到就被吞了）。"""
+    last_assistant = max((i for i, m in enumerate(messages)
+                         if m.get("role") == "assistant"), default=-1)
+    return {i for i, m in enumerate(messages)
+            if m.get("role") == "tool" and i > last_assistant}
+
+def micro_compact(messages, target_tokens=None):
+    """占位旧的、模型已消费过的工具结果。target_tokens 给了就降到即停（s08 的 80% 目标）。
+    未读批次（最后一条 assistant 之后的）整体跳过，保证模型当轮要用的结果完整。"""
     tool_results = collect_tool_result_blocks(messages)   # [(idx, block), ...]
-    if len(tool_results) <= KEEP_RECENT_TOOL_RESULTS:
+    unseen = _unseen_tool_result_indices(messages)
+    consumed = [(i, b) for i, b in tool_results if i not in unseen]   # 只动模型已看过一轮的
+    if len(consumed) <= KEEP_RECENT_TOOL_RESULTS:
         return messages
     compacted = 0
-    for _, block in tool_results[:-KEEP_RECENT_TOOL_RESULTS]:
+    for i, block in consumed[:-KEEP_RECENT_TOOL_RESULTS]:
+        if target_tokens is not None and estimate_token_count(messages) <= target_tokens:
+            break                                    # 降到目标就停，不无脑全占位
         if len(block.get("content", "")) > 120:
-            block["content"] = "[Earlier tool result compacted. Re-run if needed.]"
+            block["content"] = "[Earlier tool result compacted.]"
             compacted += 1
     if compacted:
         logger.info("[compact] micro: 旧工具结果占位 %d 条", compacted)
