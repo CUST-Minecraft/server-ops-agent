@@ -22,16 +22,28 @@ def collect_tool_result_blocks(messages: list[dict]) -> list[tuple[int, dict]]:
 def snip_compact(messages, max_messages=50):
     if len(messages) <= max_messages:
         return messages
-    head_end, tail_start = 3, len(messages) - (max_messages - 3)
+    head_end = min(3, max_messages - 1)
     if head_end > 0 and _message_has_tool_use(messages[head_end - 1]):
         while head_end < len(messages) and _is_tool_result_message(messages[head_end]):
             head_end += 1
-    if (tail_start > 0 and tail_start < len(messages)
-            and _is_tool_result_message(messages[tail_start])
-            and _message_has_tool_use(messages[tail_start - 1])):
-        tail_start -= 1
+
+    tail_start = len(messages)
+    remaining = max_messages - head_end - 1
+    while tail_start > head_end and remaining > 0:
+        block_start = tail_start - 1
+        while block_start > head_end and _is_tool_result_message(messages[block_start]):
+            block_start -= 1
+        if _message_has_tool_use(messages[block_start]):
+            while block_start > head_end and _is_tool_result_message(messages[block_start - 1]):
+                block_start -= 1
+        block_size = tail_start - block_start
+        if block_size > remaining:
+            break
+        tail_start = block_start
+        remaining -= block_size
+
     placeholder = {"role": "user",
-                   "content": f"[snipped {tail_start - head_end} messages from conversation middle]"}
+                    "content": f"[snipped {tail_start - head_end} messages from conversation middle]"}
     logger.info("[compact] snip: 裁掉中间 %d 条消息（%d -> %d）",
                 tail_start - head_end, len(messages), head_end + 1 + (len(messages) - tail_start))
     return messages[:head_end] + [placeholder] + messages[tail_start:]

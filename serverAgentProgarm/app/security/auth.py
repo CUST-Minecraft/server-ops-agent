@@ -63,7 +63,10 @@ def get_current_user(
         if auth_token.revoked_at is not None:
             raise HTTPException(status_code=401, detail="Token 已注销")
 
-        if datetime.now(timezone.utc) >= auth_token.expires_at:
+        expires_at = auth_token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= expires_at:
             raise HTTPException(status_code=401, detail="Token 已过期")
 
         # 5. 根据 user_id 找用户

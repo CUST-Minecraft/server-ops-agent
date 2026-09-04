@@ -31,3 +31,11 @@ default = true
 
 [project.scripts]
 serveragent = "app.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
