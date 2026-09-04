@@ -1,95 +1,177 @@
-# ServerOpsAgent -- Autonomous Server Monitoring & Ops Agent
+# ServerOpsAgent
 
 > English | [中文](README.md)
 
-> A single-host autonomous ops agent that wraps LLM decision-making in deterministic engineering:
-> monitors a Linux server over SSH, investigates anomalies, applies gated fixes, verifies closed-loop, and logs everything.
-
-## In One Sentence
-
-**The LLM does exactly one thing -- investigate and propose, like an on-call engineer.**
-Low-risk actions run autonomously; high-risk ones require human approval. Everything is audited, and every fix is re-verified.
-
-## Current Progress
-
-> This project grows day by day along a 15-day curriculum, currently at **Day 3**. "Done" below is what actually runs today; "Planned" is the curriculum target.
-
-### Done (Day 1 - Day 3)
-
-| Day | Deliverables | What it can do |
-|---|---|---|
-| D1 | `config.py` / `SSHClient` / `LLMClient` / `setup_logging()` | Config injected from `.env`; SSH public-key login to target host; OpenAI-compatible API wired up; unified logging |
-| D2 | `Tool` contract / 5 read-only tools / `ToolRegistry` | Five read-only tools (CPU / memory / disk / systemd status / journalctl); registry generates OpenAI function schemas |
-| D3 | `ToolResult` three-state / `ToolExecutor` / Agent Loop / `agent_chat.py` | Conversational agent that picks tools, feeds back results, and iterates; executor never raises; max_steps guardrail |
-
-Runnable today: `uv run python demo/agent_chat.py` -- ask it "how are the server resources?" and it will call `get_cpu_status` / `get_memory_usage` / `get_disk_usage` and answer from real data.
-
-### Planned (Day 4 - Day 15)
+ServerOpsAgent is a single-host Linux monitoring and controlled-operations Agent. Its central design rule is:
 
 ```text
-D4  Polling + persistence   D5  Detection + incidents   D6  Permission gates
-D7  Human approval (HITL)   D8  Gated fixes + asserts   D9  Autonomous loop
-D10 CLI + alerts (MVP)      D11 Web + MySQL             D12 Injection/failure hardening
-D13 Offline tests           D14 Chaos-injected eval     D15 Job-hunt materials
+The LLM investigates and proposes.
+Deterministic code owns tools, permissions, approval, execution, and verification.
 ```
 
-Full 15-day roadmap: [docs/README.md](docs/README.md) (in Chinese).
+It is both a Backend Agent learning project and a prototype for personal servers and personal websites. It is currently a single-host learning-grade control plane, not a production-ready public service.
 
-## How to Learn from This Repo
-
-This is a **job-hunting-oriented learning project** with a complete 15-day curriculum (each day ships a tutorial README, a task list, and study notes):
+## What It Does
 
 ```text
-docs/
-├── README.md          Course entry (usage, 15-day roadmap, 10-day fast track)
-├── day01/ ... day15/  Daily trio (README + task + notes)
-├── research/          External research notes (learn-claude-code / Hello-Agents / HolmesGPT)
-└── design/            Architecture principles, evolution, 5 ADRs
+collect -> threshold detection/debounce -> incident
+        -> LLM investigation -> runbook selection
+        -> policy gate -> approval when required
+        -> constrained remediation -> postcondition verification
+        -> resolve/alert
 ```
 
-**Start here**: [docs/README.md](docs/README.md) -> [Day 1](docs/day01/README.md)
+The LLM never receives an arbitrary shell endpoint. Tool calls go through `ToolExecutor`, policy decisions go through `PermissionEngine`, writes use `ApprovalManager`, and recovery is checked by `Verifier`.
 
-## Key Features (End State)
+## Current Status
 
-> The target shape after all 15 days; not all of it is built yet (see "Current Progress").
+Day 1 through Day 16 are implemented in the current project: monitoring, incidents, permissions, approvals, runbooks, verification, Runner, CLI, alerts, Web, authentication, multi-user chat ownership, and offline tests. Day 17 evaluation and final job-hunting material are not implemented yet.
 
-- SSH monitoring of a single Linux host: CPU / memory / disk / systemd services / logs / TCP probes
-- Anomaly detection (thresholds + debounce streaks + incident dedup) -> six-state incident machine
-- Agent investigation loop (ReAct / OpenAI-compatible function calling): three-state tool results, iteration guardrails, output truncation
-- Four-layer permission gates: deny-list -> static risk -> per-parameter dynamic escalation -> mode policy (standard/strict/auto)
-- Human-in-the-loop: approval tickets (param-hash binding + TTL + append-only audit), CLI / Web entries
-- Gated remediation: runbook whitelist (the LLM picks a playbook, never invents actions) + post-condition assertions for closed-loop verification
-- 30+ pytest offline regression (FakeSSH / FakeLLM); chaos-injected evaluation (detection rate / localization accuracy / fix success rate / MTTR)
+Current offline regression:
 
-## Tech Stack
+```text
+uv run pytest -q
+57 passed, 8 subtests passed
+```
 
-Python 3.13 / hand-written agent loop (no heavyweight framework, see [ADR-0005](docs/design/adr/0005-no-framework.md)) / OpenAI-compatible API (`openai` SDK; switchable to GLM, Kimi, DeepSeek, etc.) / paramiko / SQLAlchemy 2 (SQLite -> MySQL in one line) / FastAPI + Jinja2 / typer / pytest
+## Built-in Tools
 
-## Quick Start
+### Read-only diagnostics
+
+| Tool | Purpose | Remote command | Permission |
+|---|---|---|---|
+| `get_cpu_status` | CPU and load averages | `top -bn1 \| grep 'Cpu(s)' ; uptime` | Normal user |
+| `get_memory_usage` | Memory totals and usage | `free -m` | Normal user |
+| `get_disk_usage` | Disk usage for an absolute path | `df -h <path> \| tail -1` | Normal user |
+| `get_service_status` | systemd state | `systemctl is-active <service>` | Normal-user read access |
+| `read_service_logs` | Recent service logs | `journalctl -u <service> -n <1..200> --no-pager` | Normal user; journal access may be needed |
+| `tcp_probe` | Local TCP listener check | `timeout 2 bash -c '</dev/tcp/127.0.0.1/<port>' && echo OPEN || echo CLOSED` | Normal user |
+
+### Remediation
+
+| Tool | Purpose | Command | Default risk |
+|---|---|---|---|
+| `restart_service` | Restart a selected systemd service | `sudo -n systemctl restart <service>` | Medium; critical services are upgraded to high |
+
+Current runbooks are `nginx_restart` and `docker_restart`. The latter restarts the Docker daemon, which can affect every container on the host; it does not only restart the MySQL container.
+
+## Custom Tools
+
+Add a tool through the `Tool` contract and register it in `app/runtime_deps.py`. Do not call SSH directly from Web, CLI, or Agent code.
+
+```python
+from app.ssh.ssh_client import SSHClient
+from app.tools.base import Tool
+
+
+def build_custom_tools(ssh: SSHClient) -> list[Tool]:
+    def nginx_health(_args: dict) -> dict:
+        result = ssh.run("systemctl is-active nginx")
+        if result["exit_code"] != 0:
+            raise RuntimeError(result["stderr"] or "nginx status check failed")
+        state = result["stdout"].strip() or "unknown"
+        return {"service": "nginx", "state": state, "active": state == "active"}
+
+    return [Tool(
+        name="nginx_health",
+        description="Check whether nginx is active",
+        parameters={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        handler=nginx_health,
+        risk_level="low",
+    )]
+```
+
+Register the builder beside the existing built-in builders. A write tool also needs an explicit risk level, a Runbook, approval semantics, a precise sudoers entry, a postcondition, and FakeSSH tests. Never add a general-purpose shell tool or give a future write tool the default low-risk classification.
+
+## Target Host Permission Model
+
+The Agent stores the SSH private key on the Agent host. The target host has a restricted `opsagent` account with a Bash login shell and public-key authentication.
+
+### Required access
+
+- Allow TCP `22` from the Agent host or management network only.
+- Install the Agent public key in `opsagent`'s `authorized_keys`.
+- Keep the target account out of the `docker` group.
+- The read-only commands listed above need to be available in the target account's PATH.
+- To read the complete system journal, use a per-service access policy where possible. Adding `opsagent` to `systemd-journal` grants broader log visibility and should be reviewed for sensitive data.
+
+### Minimal write sudoers policy
+
+The current remediation handler runs only:
+
+```text
+sudo -n systemctl restart nginx
+sudo -n systemctl restart docker
+```
+
+The matching narrow policy is:
+
+```text
+opsagent ALL=(root) NOPASSWD: /usr/bin/systemctl restart nginx, /usr/bin/systemctl restart docker
+```
+
+Use the actual `systemctl` path on the target host, keep the sudoers file at mode `0440`, and validate it with `visudo -c`.
+
+Do not grant:
+
+```text
+opsagent ALL=(root) NOPASSWD: ALL
+opsagent ALL=(root) NOPASSWD: /usr/bin/systemctl
+opsagent ALL=(root) NOPASSWD: /usr/bin/docker
+usermod -aG docker opsagent
+```
+
+Full Docker access is effectively root access. Add one exact command only after reviewing its blast radius.
+
+## Web Security Boundary
+
+The login page and static assets are public entry points. Operational APIs require a valid Bearer Token. Tokens are bcrypt/opaque-token based at the application boundary, expire, can be revoked, and are stored as hashes in the database. Chat history is scoped by authenticated `user_id` and cross-user access is rejected.
+
+This remains a learning-grade baseline:
+
+- RBAC is modeled but not fully enforced; do not expose approval APIs to an untrusted user population.
+- The frontend uses `sessionStorage`, which reduces persistence but does not protect against same-origin XSS. Production should use HTTPS and consider HttpOnly cookies or a protected refresh design.
+- Chat history validation, approval/incident correlation, atomic approval claiming, SSH host-key pinning, rate limiting, retention, migrations, and complete audit hardening still need production work.
+
+## Network Boundary
+
+- Put the Web service behind a reverse proxy and HTTPS before public exposure.
+- Do not expose Uvicorn port `8000` directly to the Internet.
+- Bind MySQL port `3306` to localhost, a private network, or a VPN; never expose it publicly.
+- Pin the target SSH host key before using the Agent on an untrusted network. The current SSH client still needs this production hardening.
+
+## Offline Tests
+
+The regression suite does not contact a real target host, LLM provider, or MySQL:
+
+- `FakeSSHClient` replaces SSH.
+- `FakeLLM` replaces the model service.
+- StaticPool SQLite replaces MySQL.
+- pytest only collects `serverAgentProgarm/tests/`.
 
 ```bash
-# Prereqs: a Linux VM + SSH key login + an LLM API key
-#          (full setup steps: serverAgentProgarm/README.md, in Chinese)
 cd serverAgentProgarm
 uv sync
-cp .env.example .env       # fill in config (server / SSH key / LLM key / DB_URL / LOG_LEVEL)
-uv run python demo/agent_chat.py    # the conversational agent, runnable today
+uv run pytest -q
 ```
 
-## Target Architecture
+## Repository Guide
 
 ```text
-CLI / Web ──> ApprovalManager ──> ToolExecutor ──> Permission Engine (4 layers) ──> Tools ──SSH──> Linux
-                  ▲                    │                                                 │
-Runner loop ──────┤                    └── AuditLog                                     ▼
-  collect->detect->incident FSM->LLM investigate->runbook match->fix->assert->close  MySQL (5 tables, full audit trail)
-                                        └── Alerter ──> human
+serverAgentProgarm/app/agent/          Loop, memory, context compaction
+serverAgentProgarm/app/detect/         Detector and incident service
+serverAgentProgarm/app/remediation/    Runbooks, verifier, remediation
+serverAgentProgarm/app/runtime/        Runner and investigator
+serverAgentProgarm/app/security/       Policy, approvals, auth, audit
+serverAgentProgarm/app/tools/          Tool contract, registry, built-ins
+serverAgentProgarm/app/web/            FastAPI facade and static hosting
+serverAgentProgarm/tests/              Offline pytest suite and fixtures
+serverAgentProgarm/web/                Vue 3 + Vite frontend
+docs/                                  Course, architecture, ADRs, reports
 ```
 
-> Only the `Tools ─SSH─> Linux` path and the agent loop exist today; the rest grows with the curriculum.
-
-Five architecture principles: `Agent != Tool`, `Tool != SSH`, `Permission != execution`, `Monitoring != LLM`, `LLM != security boundary` (expanded in [docs/design/README.md](docs/design/README.md), in Chinese)
-
-## Learning-Project Disclaimer
-
-This is a **job-hunting-oriented learning project**. It borrows ideas from learn-claude-code, Hello-Agents, and HolmesGPT; every design decision (what was researched -> what was considered -> what was rejected -> what was chosen -> why) is documented in [docs/research/](docs/research/) and [docs/design/adr/](docs/design/adr/) (in Chinese).
+Detailed deployment and daily-operation instructions are intentionally kept separate from this project overview and will be added later.

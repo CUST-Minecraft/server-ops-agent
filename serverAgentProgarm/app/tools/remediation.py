@@ -7,7 +7,7 @@ from app.tools.builtin import validate_service_name
 def build_remediation_tools(ssh: SSHClient) -> list[Tool]:
     def restart_service(args: dict) -> dict:
         service = validate_service_name(args["service"])      # 复用 Day 2 的白名单校验
-        r = ssh.run(f"systemctl restart {service}")
+        r = ssh.run(f"sudo -n systemctl restart {service}")
         if r["exit_code"] != 0:
             raise RuntimeError(f"restart {service} 失败(exit={r['exit_code']}): {r['stderr']}")
         return {"service": service, "restarted": True, "elapsed_ms": r["elapsed"]}
