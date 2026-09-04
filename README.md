@@ -79,7 +79,7 @@ cd web && npm install && npm run build && cd ..
 uv run uvicorn app.web.app:app --port 8000
 ```
 
-> Web 登录需要 users 表中存在 bcrypt 哈希账号；用户初始化脚本尚未提供，当前通过数据库手工种入（见 Web 章节说明）。
+> Web 登录需要 users 表中存在 bcrypt 哈希账号；用户初始化脚本尚未提供(其实是忘了...可以通过运行storage/db.py 进行初始化)
 
 ## 内置工具
 
