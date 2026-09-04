@@ -94,23 +94,47 @@ export interface AuthPayload {
 
 const TOKEN_KEY = 'soa_token'
 const USER_KEY = 'soa_user'
+const CHAT_SESSION_PREFIX = 'soa_chat_session:'
+
+function clearLegacyLocalSession(): void {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+  localStorage.removeItem('soa_chat_session')
+}
+
+function chatSessionKey(username: string): string {
+  return `${CHAT_SESSION_PREFIX}${encodeURIComponent(username)}`
+}
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  clearLegacyLocalSession()
+  return sessionStorage.getItem(TOKEN_KEY)
 }
 
 export function getUsername(): string | null {
-  return localStorage.getItem(USER_KEY)
+  clearLegacyLocalSession()
+  return sessionStorage.getItem(USER_KEY)
 }
 
 export function saveSession(token: string, username: string): void {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, username)
+  const previousUsername = getUsername()
+  if (previousUsername && previousUsername !== username) {
+    sessionStorage.removeItem(chatSessionKey(previousUsername))
+  }
+  sessionStorage.setItem(TOKEN_KEY, token)
+  sessionStorage.setItem(USER_KEY, username)
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+  const username = getUsername()
+  if (username) sessionStorage.removeItem(chatSessionKey(username))
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
+  clearLegacyLocalSession()
+}
+
+export function hasActiveSession(): boolean {
+  return getToken() !== null && getUsername() !== null
 }
 
 const BASE = import.meta.env.VITE_API_BASE ?? ''
@@ -151,13 +175,15 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
-async function post<T>(path: string, body?: unknown): Promise<T> {
+async function post<T>(path: string, body?: unknown, authenticated = true): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: authenticated
+      ? authHeaders({ 'Content-Type': 'application/json' })
+      : new Headers({ 'Content-Type': 'application/json' }),
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  if (res.status === 401) {
+  if (authenticated && res.status === 401) {
     handle401(path)
     throw new Error((await bodyDetail(res)) ?? '未登录或登录已过期')
   }
@@ -175,13 +201,15 @@ export interface ChatHistoryPayload {
   messages: ChatMessage[]
 }
 
-const SESSION_KEY = 'soa_chat_session'
-
 export function chatSessionId(): string {
-  let id = localStorage.getItem(SESSION_KEY)
+  const username = getUsername()
+  if (!username) throw new Error('登录会话不存在')
+
+  const key = chatSessionKey(username)
+  let id = sessionStorage.getItem(key)
   if (!id) {
-    id = `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
-    localStorage.setItem(SESSION_KEY, id)
+    id = `c_${crypto.randomUUID()}`
+    sessionStorage.setItem(key, id)
   }
   return id
 }
@@ -275,6 +303,6 @@ export const api = {
   reject: (id: number) => post<ActionPayload>(`/api/approvals/${id}/reject`),
   /* day15 预留：后端实现 /api/auth/login + /api/auth/logout 后启用 */
   login: (username: string, password: string) =>
-    post<AuthPayload>('/api/auth/login', { username, password }),
+    post<AuthPayload>('/api/auth/login', { username, password }, false),
   logout: () => post<{ ok: boolean }>('/api/auth/logout'),
 }

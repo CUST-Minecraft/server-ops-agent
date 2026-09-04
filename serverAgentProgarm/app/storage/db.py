@@ -1,7 +1,7 @@
 """ 数据库层唯一入口：engine、会话工厂、建表。"""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.storage.models import Base,MetricSnapshot
+from app.storage.models import Base
 from app.config import ServerSettings
 
 

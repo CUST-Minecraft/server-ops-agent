@@ -10,21 +10,31 @@ import LoginView from './components/LoginView.vue'
 import Clock from './components/Clock.vue'
 import MascotGif from './components/MascotGif.vue'
 import { toastState, toast } from './toast'
-import { getUsername, clearSession, api, AUTH_EVENT } from './api'
+import { getUsername, hasActiveSession, clearSession, api, AUTH_EVENT } from './api'
 
 type Route =
   | { name: 'overview' | 'incidents' | 'approvals' | 'chat' | 'login' }
   | { name: 'detail'; id: string }
 
-const route = ref<Route>({ name: 'overview' })
+const route = ref<Route>({ name: 'login' })
 const username = ref(getUsername())
 
 const TAB_NAMES = ['overview', 'incidents', 'approvals', 'chat'] as const
 
 function parseHash(): void {
+  username.value = getUsername()
   const h = location.hash.replace(/^#\/?/, '').split('?')[0]
   if (h === 'login') {
+    if (hasActiveSession()) {
+      window.location.hash = '#/'
+      return
+    }
     route.value = { name: 'login' }
+    return
+  }
+  if (!hasActiveSession()) {
+    route.value = { name: 'login' }
+    window.location.hash = '#/login'
     return
   }
   const m = h.match(/^incidents\/(\d+)$/)
@@ -74,14 +84,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="shell">
+  <LoginView v-if="route.name === 'login'" />
+
+  <div v-else class="shell">
     <header class="topbar">
       <a class="brand" href="#/">
         <div class="brand-avatar"><MascotGif /></div>
         <span class="brand-name">ServerOps<span class="brand-accent">Agent</span></span>
         <span class="brand-sub">值班台 ✦</span>
       </a>
-      <TabNav :route="tabActive()" />
+      <TabNav v-if="username" :route="tabActive()" />
       <div class="topbar-right">
         <template v-if="username">
           <span class="who num">👤 {{ username }}</span>
@@ -99,7 +111,6 @@ onUnmounted(() => {
             : route.name === 'incidents' ? IncidentsView
             : route.name === 'approvals' ? ApprovalsView
             : route.name === 'chat' ? ChatView
-            : route.name === 'login' ? LoginView
             : IncidentDetailView"
           :key="route.name === 'detail' ? `detail-${route.id}` : route.name"
           :incident-id="route.name === 'detail' ? route.id : undefined"
@@ -111,15 +122,15 @@ onUnmounted(() => {
       <span>ServerOpsAgent ✦ 前后端分离门面</span>
       <span class="foot-hint">数据源：MySQL 共享总线 · /api/*</span>
     </footer>
+  </div>
 
-    <div class="toasts" aria-live="polite">
-      <TransitionGroup name="toast">
-        <div v-for="t in toastState.items" :key="t.id" class="toast" :class="`toast-${t.kind}`">
-          <span class="toast-mark num">{{ t.kind === 'ok' ? '✓' : t.kind === 'err' ? '✕' : 'ℹ' }}</span>
-          <span class="toast-text num">{{ t.text }}</span>
-        </div>
-      </TransitionGroup>
-    </div>
+  <div class="toasts" aria-live="polite">
+    <TransitionGroup name="toast">
+      <div v-for="t in toastState.items" :key="t.id" class="toast" :class="`toast-${t.kind}`">
+        <span class="toast-mark num">{{ t.kind === 'ok' ? '✓' : t.kind === 'err' ? '✕' : 'ℹ' }}</span>
+        <span class="toast-text num">{{ t.text }}</span>
+      </div>
+    </TransitionGroup>
   </div>
 </template>
 

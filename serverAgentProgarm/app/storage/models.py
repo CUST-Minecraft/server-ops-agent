@@ -88,11 +88,33 @@ class RemediationRecord(Base):
                 f"args={self.args!r}, status={self.status!r})")
 
 
-# 对话历史落库（CLI 与 Web 共用同一张表，设计见 memory-chat-design §4.5）
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(String(64), index=True)   # 区分会话
-    role: Mapped[str] = mapped_column(String(16))                     # user / assistant
+    session_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[int] = mapped_column(index=True)      # 新增：这条对话属于谁
+    role: Mapped[str] = mapped_column(String(16))          # user / assistant
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(128))   # bcrypt 哈希，非明文
+    role: Mapped[str] = mapped_column(String(16), default="operator")  # admin / operator
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -22,6 +22,7 @@ async function doLogin(): Promise<void> {
   } catch (e) {
     toast(`登录失败：${e instanceof Error ? e.message : String(e)}`, 'err')
   } finally {
+    password.value = ''
     busy.value = false
   }
 }
@@ -50,7 +51,7 @@ async function doLogin(): Promise<void> {
         </button>
       </form>
 
-      <p class="login-hint num">未登录时仅可查看；审批操作需要身份（day15 后端鉴权启用后生效）</p>
+      <p class="login-hint num">登录后可查看值班数据并执行审批；Token 关闭浏览器标签页后失效</p>
     </div>
   </div>
 </template>
@@ -60,7 +61,8 @@ async function doLogin(): Promise<void> {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 60vh;
+  min-height: 100vh;
+  padding: 24px;
 }
 
 .login-card {
