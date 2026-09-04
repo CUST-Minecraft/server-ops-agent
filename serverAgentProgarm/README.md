@@ -11,19 +11,25 @@ uv sync
 cp .env.example .env
 ```
 
-`.env` 至少需要提供：
+`.env` 至少需要提供以下必填项：
 
 ```text
 SERVER_HOST
-SERVER_PORT
 SERVER_USER
 KEY_PATH
 DB_URL
 LOG_LEVEL
+```
+
+运行自治调查、CLI chat 或 Web chat 时还需要 LLM 配置：
+
+```text
 API_KEY
 BASE_URL
 MODEL_ID
 ```
+
+选填项及默认值见仓库根目录 [README.md](../README.md) 的配置表和 `.env.example`；其中 `SERVER_PORT` 默认为 `22`，监控、审批、策略、阈值和上下文压缩参数均有默认值。
 
 目标机地址、SSH 私钥和 LLM API Key 只放在本地环境变量或密钥管理系统中，不提交到 Git。
 

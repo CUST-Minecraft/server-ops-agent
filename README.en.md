@@ -38,25 +38,42 @@ Design rule: the LLM investigates and proposes; it is never the security boundar
 
 ```bash
 git clone <repo-url>
-cd server-agent/serverAgentProgarm
+cd server-ops-agent/serverAgentProgarm
 uv sync
 cp .env.example .env   # fill in the config below
 ```
 
 ### Configuration
 
-Key `.env` entries:
+Variables are loaded by the three settings models in `app/config.py`. The application fails configuration validation when a required value is missing; optional values use the defaults below.
 
-| Variable | Description |
-|---|---|
-| `SERVER_HOST` / `SERVER_PORT` / `SERVER_USER` / `KEY_PATH` | Target SSH connection; `KEY_PATH` must be absolute |
-| `DB_URL` | `sqlite:///data/agent.db` or a MySQL URL |
-| `API_KEY` / `BASE_URL` / `MODEL_ID` | OpenAI-compatible LLM service |
-| `POLICY_MODE` | `standard` (default; writes need approval) / `strict` / `auto` |
-| `WATCHED_SERVICES` | Comma-separated systemd services to watch |
-| `THRESHOLD_*` | Detection thresholds and debounce counts (optional) |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SERVER_HOST` | Yes | None | Target Linux server address |
+| `SERVER_PORT` | No | `22` | SSH port, 1-65535 |
+| `SERVER_USER` | Yes | None | SSH user; a restricted `opsagent` account is recommended |
+| `KEY_PATH` | Yes | None | SSH private-key path; use an absolute path |
+| `DB_URL` | Yes | None | Database URL, such as `sqlite:///data/agent.db` or a MySQL URL |
+| `LOG_LEVEL` | Yes | None | Log level, such as `INFO` or `WARNING` |
+| `API_KEY` | Yes | None | OpenAI-compatible LLM API key |
+| `BASE_URL` | Yes | None | OpenAI-compatible LLM endpoint, such as `https://api.example.com/v1` |
+| `MODEL_ID` | Yes | None | LLM model identifier |
+| `MONITOR_INTERVAL` | No | `30` | Autonomous polling interval in seconds |
+| `WATCHED_SERVICES` | No | `ssh,docker` | Comma-separated systemd services to watch |
+| `POLICY_MODE` | No | `standard` | `standard`/`strict` require approval for writes; `auto` allows medium risk automatically, while high risk still requires approval |
+| `APPROVAL_TTL_MINUTES` | No | `60` | Approval-request lifetime in minutes |
+| `INVESTIGATE_MAX_RETRIES` | No | `2` | Maximum retries after a failed investigation or no runbook recommendation |
+| `ALERT_WEBHOOK_URL` | No | Empty | Optional alert webhook; console alerts remain enabled without it |
+| `MAX_OUTPUT_CHARS` | No | `8000` | Maximum tool-result characters sent to the LLM |
+| `MEMORY_CONSOLIDATE_THRESHOLD` | No | `10` | Number of memory files that triggers consolidation |
+| `COMPACT_TOKEN_THRESHOLD` | No | `24000` | Estimated token count that triggers context compaction |
+| `THRESHOLD_CPU_PCT` | No | `85` | CPU alert threshold, percent |
+| `THRESHOLD_MEM_PCT` | No | `85` | Memory alert threshold, percent |
+| `THRESHOLD_DISK_PCT` | No | `80` | Disk alert threshold, percent |
+| `THRESHOLD_SUSTAIN` | No | `3` | Consecutive CPU/memory/disk threshold breaches |
+| `THRESHOLD_SERVICE_SUSTAIN` | No | `2` | Consecutive abnormal systemd-service readings |
 
-See `.env.example` for the full list.
+Copy `.env.example` and replace the required values. The `THRESHOLD_*` variables are loaded by `ThresholdSettings` through its `THRESHOLD_` environment prefix.
 
 ### Verify the Installation
 
@@ -82,7 +99,33 @@ cd web && npm install && npm run build && cd ..
 uv run uvicorn app.web.app:app --port 8000
 ```
 
-> Web login requires a bcrypt-hashed account in the `users` table. A user seeding script is not yet provided; accounts are currently created directly in the database (see the Web section).
+> On startup, the Web app calls `init_db()` from `app/storage/db.py` and creates missing tables, including `users`; it does not create the first account. There is currently no user-seeding command, so create one bcrypt-hashed account before the first login.
+
+### Database and First Web User
+
+`app/storage/db.py` is the database schema initialization entry point:
+
+```bash
+cd serverAgentProgarm
+uv run python -m app.storage.db
+```
+
+This calls `Base.metadata.create_all(engine)` and creates missing tables such as `users`, `auth_tokens`, incidents, and audit logs. It does not delete existing data or create a default user. The Web app runs the same `init_db()` during startup, so you normally do not need to run it separately.
+
+To create the first user, generate a bcrypt hash first:
+
+```bash
+uv run python -c "from app.security.auth import hash_password; print(hash_password('replace-with-a-strong-password'))"
+```
+
+Then insert the account into the database configured by `DB_URL` (replace `<bcrypt-hash>` with the complete output):
+
+```sql
+INSERT INTO users (username, password_hash, role, created_at)
+VALUES ('admin', '<bcrypt-hash>', 'admin', CURRENT_TIMESTAMP);
+```
+
+Do not put the plaintext password in the repository, `.env`, or shell history. In production, generate and enter the hash through a password manager or an interactive process.
 
 ## Built-in Tools
 
@@ -105,7 +148,7 @@ Tools are registered in a `ToolRegistry` that generates OpenAI function schemas.
 |---|---|---|
 | `restart_service` | Restart a systemd service | `sudo -n systemctl restart <service>` |
 
-Built-in runbooks:
+### Built-in runbooks
 
 | Runbook | Action | Postcondition |
 |---|---|---|
@@ -114,12 +157,71 @@ Built-in runbooks:
 
 Input constraints: service names match a whitelist charset (alphanumerics `._-`); disk paths must be absolute and reject `..`; ports 1-65535; log lines 1-200.
 
+### How Runbooks Work
+
+A runbook is not a shell command that the LLM can invent. It is an allowlisted remediation definition:
+
+1. The investigator gives the LLM each runbook's `name` and `trigger`; the final answer may contain an exact registered name or `null`.
+2. The Runner looks up that name in `RUNBOOKS`. A name outside the allowlist is never executed.
+3. `plan` invokes exactly one registered Tool with a fixed argument dictionary. The LLM cannot rewrite those arguments.
+4. After the Tool succeeds, the Verifier executes every read-only check in `postcondition.checks`. All `expect` key/value pairs must match for the result to be `verified`.
+5. A medium/high-risk Tool still goes through the policy and approval flow; a runbook never bypasses the permission gate.
+
+`trigger` is guidance for the LLM, not a security check. `description` and `risk_note` are runbook metadata. In the current implementation, `plan` does not support `${...}` placeholders, runtime parameters, or a multi-step plan list: one runbook means one Tool call plus multiple postcondition checks.
+
+### Customize a Runbook: Reuse an Existing Tool
+
+If you only need a restart runbook for another systemd service, you do not need to write a new Tool. Edit `serverAgentProgarm/app/remediation/runbooks.py` and add a new `Runbook` to `RUNBOOKS`:
+
+```python
+Runbook(
+    name="api_restart",  # unique; the LLM must return this exact string
+    description="Restart the api service",
+    trigger="Use when api is inactive/failed or port 8080 is unreachable",
+    plan={
+        "tool": "restart_service",  # must be a registered Tool
+        "args": {"service": "api"},
+    },
+    postcondition={
+        "checks": [
+            {
+                "tool": "get_service_status",  # registered read-only Tool
+                "args": {"service": "api"},
+                "expect": {"active": True},  # keys from the Tool's data
+            },
+            {
+                "tool": "tcp_probe",
+                "args": {"port": 8080},
+                "expect": {"port_open": True},
+            },
+        ]
+    },
+    risk_note="api is briefly unavailable during restart",
+),
+```
+
+Steps:
+
+1. Add the object to the `RUNBOOKS` list and keep `name` unique.
+2. Confirm that `api.service` exists on the target host and set the actual listening port in `tcp_probe`; remove checks you do not need.
+3. If `api` is not allowed by the target host's sudoers whitelist, add one exact command as described in the permissions section.
+4. Test on a non-production host in `auto` mode:
+
+   ```bash
+   cd serverAgentProgarm
+   uv run python demo/run_runbook.py api_restart
+   ```
+
+5. Keep `POLICY_MODE=standard` in production. Run `uv run serveragent approvals` to inspect the request and `uv run serveragent approve <approval-id>` to approve it; the autonomous Runner performs the postcondition checks on its next tick.
+
+The `expect` object must use keys returned in the Tool's `data`. For example, `get_service_status` returns `active`, while `tcp_probe` returns `port_open`; an unknown key makes verification fail.
+
 ## Custom Tools
 
 Tools are the only SSH consumers. Adding a capability means defining a Tool and registering it — never call SSH from Agent, Web, or CLI code directly.
 
 ```python
-# app/tools/custom.py
+# create app/tools/custom.py
 from app.ssh.ssh_client import SSHClient
 from app.tools.base import Tool
 
@@ -141,10 +243,16 @@ def build_custom_tools(ssh: SSHClient) -> list[Tool]:
     )]
 ```
 
-Register it in `app/runtime_deps.py`:
+Register it at the shared assembly point, `app/runtime_deps.py`. Otherwise a runbook's `plan.tool` or a postcondition check cannot find the Tool:
 
 ```python
-for tool in build_readonly_tools(ssh) + build_custom_tools(ssh) + build_remediation_tools(ssh):
+from app.tools.custom import build_custom_tools
+
+for tool in (
+    build_readonly_tools(ssh)
+    + build_custom_tools(ssh)
+    + build_remediation_tools(ssh)
+):
     registry.register(tool)
 ```
 
@@ -158,7 +266,15 @@ for tool in build_readonly_tools(ssh) + build_custom_tools(ssh) + build_remediat
 
 ### Checklist for write tools
 
-Beyond registration, a write tool needs: a precise sudoers entry (below), a runbook definition (`app/remediation/runbooks.py`), postcondition assertions, and an explicit decision on approval semantics. `auto` mode auto-allows medium risk — validate new write tools under `standard` mode first.
+If the action cannot be implemented by an existing Tool, add it in this order:
+
+1. Define it in `app/tools/remediation.py` or a custom module, validate arguments strictly, and declare `risk_level="medium"` or `"high"` explicitly.
+2. Register it in `app/runtime_deps.py`; the runbook's `plan.tool` must exactly equal `Tool.name`.
+3. Allow only the exact command in target-host sudoers; never use `ALL` or a wildcard.
+4. Add a Runbook in `app/remediation/runbooks.py` and use read-only Tools for its postconditions.
+5. Add FakeSSH tests for argument validation, the exact SSH command, failure paths, and dangerous input.
+
+`auto` only auto-allows medium risk; high risk (for example, critical services) still requires approval. Validate new write Tools under `standard` before enabling automation.
 
 ## Target Host Permissions
 
@@ -253,18 +369,16 @@ serverAgentProgarm/
 │   └── web/            FastAPI facade
 ├── tests/              offline test suite
 └── web/                Vue3 + Vite frontend
-docs/                   architecture, ADRs, API contract, daily records
 deploy/                 MySQL docker-compose
 ```
 
 ## Documentation
 
-- Architecture and evolution: [docs/design/architecture.md](docs/design/architecture.md) (Chinese)
-- API contract: [docs/design/api-contract.md](docs/design/api-contract.md) (Chinese)
-- ADRs: [docs/design/adr/](docs/design/adr/)
-- Test process and results: [docs/day16/test-process.md](docs/day16/test-process.md), [docs/day16/test-results.md](docs/day16/test-results.md)
-- Frontend security audit: [docs/day15/frontend-security-remediation.md](docs/day15/frontend-security-remediation.md)
+- Usage, configuration, Runbooks, and permission boundaries: this README
+- Chinese version: [README.md](README.md)
+- Python subproject notes: [serverAgentProgarm/README.md](serverAgentProgarm/README.md)
+- `docs/` contains local learning and design notes. It is ignored by `.gitignore` and is not published to GitHub.
 
 ## Disclaimer
 
-This project is built around the principle of wrapping LLM decisions in deterministic engineering. It is suitable for controlled personal-server operations, but it is not yet a production-grade control plane: SSH host-key pinning, atomic approval claiming, database migrations, enforced RBAC, and data-retention policies are still pending (see the docs). Complete those hardening steps before deploying on untrusted networks or multi-user environments.
+This project is built around the principle of wrapping LLM decisions in deterministic engineering. It is suitable for controlled personal-server operations, but it is not yet a production-grade control plane: SSH host-key pinning, atomic approval claiming, database migrations, enforced RBAC, and data-retention policies are still pending. Complete those hardening steps before deploying on untrusted networks or multi-user environments.
