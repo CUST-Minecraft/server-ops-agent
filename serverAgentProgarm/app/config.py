@@ -19,6 +19,25 @@ class ServerSettings(BaseSettings):
     max_output_chars :int = 8000
     memory_consolidate_threshold: int = 10    # 记忆文件数达到此值触发整理（步骤7）
     compact_token_threshold: int = 24000      # 估算 token 超此值触发 L4 摘要（Day14 步骤1）
+    mcp_enabled: bool = False
+    mcp_config_path: str = "mcp.json"
+    recovery_rag_enabled: bool = True
+    recovery_index_path: str = ".knowledge/recovery.sqlite"
+    recovery_embedding_provider: str = "ollama"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    recovery_embedding_model: str = "qwen3-embedding:0.6b"
+    recovery_embedding_timeout_seconds: float = 30.0
+    recovery_embedding_batch_size: int = 16
+    recovery_top_k: int = 5
+    recovery_dense_min_score: float = 0.5
+    recovery_candidate_limit: int = 20
+    recovery_rrf_k: int = 60
+    recovery_context_max_chars: int = 6000
+    recovery_case_origin: str = "real"
+    recovery_auto_index_enabled: bool = True
+    recovery_index_debounce_seconds: float = 3.0
+    recovery_index_retry_seconds: float = 30.0
+    recovery_index_max_attempts: int = 3
 
 class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -47,5 +66,3 @@ if __name__ == "__main__":
     print(f"数据库: {s.db_url}")
     print(f"key_path路径: {s.key_path}")
     print(s.server_host)
-
-

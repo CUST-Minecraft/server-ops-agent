@@ -1,7 +1,7 @@
 """所有数据表定义。随课程天数逐步增加（今天只有快照表）。"""
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, String, Text
+from sqlalchemy import Boolean, JSON, DateTime, Float, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -31,7 +31,7 @@ class Incident(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(String(64), index=True)     # 规则 key 或 "service_down:<name>"
     severity: Mapped[str] = mapped_column(String(16))             # warning / critical
-    status: Mapped[str] = mapped_column(String(16), default="open")   # open / resolved（后续扩展）
+    status: Mapped[str] = mapped_column(String(32), default="open")   # open / resolved（后续扩展）
     title: Mapped[str] = mapped_column(String(255))               # 人话标题
     detail: Mapped[dict] = mapped_column(JSON, default=dict)  # 开单时的事实快照
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -86,6 +86,46 @@ class RemediationRecord(Base):
         """调试友好：print / 日志里直接可读，而不是 <ApprovalRequest object at 0x...>。"""
         return (f"ApprovalRequest(id={self.id}, tool={self.tool!r}, "
                 f"args={self.args!r}, status={self.status!r})")
+
+
+class RemediationContext(Base):
+    """不可变地绑定一次修复与其调查快照/审批单。"""
+    __tablename__ = "remediation_contexts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    remediation_record_id: Mapped[int] = mapped_column(unique=True, index=True)
+    incident_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    approval_request_id: Mapped[int | None] = mapped_column(unique=True, nullable=True)
+    investigation_attempt: Mapped[int | None] = mapped_column(nullable=True)
+    investigation_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    snapshot_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    state: Mapped[str] = mapped_column(String(16), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RecoveryCaseRecord(Base):
+    """Verified 修复案例或不可索引的技术失败 observation。"""
+    __tablename__ = "recovery_case_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    source_incident_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    source_remediation_record_id: Mapped[int] = mapped_column(unique=True, index=True)
+    origin: Mapped[str] = mapped_column(String(16), default="real")
+    outcome: Mapped[str] = mapped_column(String(32))
+    record_status: Mapped[str] = mapped_column(String(16), default="active")
+    index_status: Mapped[str] = mapped_column(String(16), default="pending")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    model_hypothesis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    executed_runbook: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    runbook_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    occurrence_signature: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    aggregate_dirty: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ChatMessage(Base):

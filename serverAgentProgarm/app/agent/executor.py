@@ -22,11 +22,21 @@ class ToolExecutor:
         self.registry = registry
         self.approval_manager = approval_manager
 
-    def execute(self, name: str, args: dict | None = None,approved: bool = False) -> ToolResult:
+    def execute(
+        self,
+        name: str,
+        args: dict | None = None,
+        approved: bool = False,
+        incident_id: int | None = None,
+    ) -> ToolResult:
         """执行一个工具。约定：本方法永不抛异常，失败也以 ToolResult(status=error) 返回。"""
-        args = args or {}
-        invocation = f"{name}({', '.join(f'{k}={v!r}' for k, v in args.items())})"
+        if args is None:
+            args = {}
+        if not isinstance(args, dict):
+            return ToolResult(status="error", error="工具参数必须是 JSON 对象", invocation=name)
         tool = self.registry.get(name)
+        visible_args = tool.observability_filter(args) if tool and tool.observability_filter else args
+        invocation = f"{name}({', '.join(f'{k}={v!r}' for k, v in visible_args.items())})"
         if tool is None:                                    # 情况一已给：未知工具
             return ToolResult(status="error", error=f"未知工具: {name}",
                               invocation=invocation)
@@ -37,7 +47,7 @@ class ToolExecutor:
         if self.policy is not None:
             decision = self.policy.check(tool, args)
             if self.session_factory is not None:
-                log_decision(self.session_factory, name, args, decision)
+                log_decision(self.session_factory, name, visible_args, decision)
             if decision.decision == Decision.DENY:
                 return ToolResult(status="error",
                                   error=f"权限拒绝: {decision.reason}", invocation=invocation)
@@ -48,9 +58,12 @@ class ToolExecutor:
             needs = decision.decision == Decision.NEEDS_APPROVAL
             if needs and not approved:
                 if self.approval_manager is not None:
-                    req = self.approval_manager.create_pending(name, args, decision.reason)
+                    req = self.approval_manager.create_pending(
+                        name, args, decision.reason, incident_id=incident_id
+                    )
                     return ToolResult(
                         status="approval_required",
+                        data={"approval_id": req.id},
                         error=f"已创建审批单 #{req.id}"
                               f"（{self.approval_manager.ttl_minutes}分钟内有效），等待人工批准",
                         invocation=invocation,
@@ -79,7 +92,7 @@ class ToolExecutor:
             if isinstance(result, ToolResult):
                 result.invocation = result.invocation or invocation
                 result.elapsed_ms = elapsed
-                return result
+                return self._truncate(result)
             if isinstance(result, dict):
                 final = ToolResult(
                     status="success",

@@ -1,3 +1,4 @@
+import pytest
 from app.security.policy import Decision
 import app.agent.executor as executor_module
 from app.tools.remediation import build_remediation_tools
@@ -57,3 +58,29 @@ def test_large_dict_output_is_truncated(executor, monkeypatch):
 
     assert result.data["_truncated"] is True
     assert result.data["_original_chars"] > 20
+
+
+def test_large_tool_result_is_truncated(executor, monkeypatch):
+    monkeypatch.setattr(executor_module, "MAX_OUTPUT_CHARS", 20)
+    executor.registry.register(Tool(
+        name="large_tool_result",
+        description="test",
+        parameters={"type": "object", "properties": {}},
+        handler=lambda _args: executor_module.ToolResult(
+            status="success", data={"payload": "x" * 100}
+        ),
+    ))
+
+    result = executor.execute("large_tool_result")
+
+    assert result.data["_truncated"] is True
+    assert result.data["_original_chars"] > 20
+
+
+@pytest.mark.parametrize("arguments", [[], ["shop"], "shop", 0, False])
+def test_non_object_arguments_return_error_before_handler(executor, arguments):
+    calls = []
+    executor.registry.register(Tool(name="object_only",description="test",
+        parameters={"type":"object"},handler=lambda _: calls.append(True) or {}))
+    result = executor.execute("object_only",arguments)
+    assert result.status == "error" and calls == []

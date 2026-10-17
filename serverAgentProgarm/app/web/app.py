@@ -225,7 +225,8 @@ async def chat_stream(request: Request,current_user: User = Depends(get_current_
         try:
             # 组装（同 CLI chat）：system + 注入记忆；压缩/提取由 run_agent 的 context 路径跑
             settings = ServerSettings()
-            executor, registry, _ = build_executor_and_approvals()
+            executor, registry, _ = await asyncio.to_thread(
+                build_executor_and_approvals, include_mcp=True)
             llm = LLMClient()
             system_prompt = get_system_prompt(update_context({}, [], registry, settings))
             messages = [{"role": "system", "content": system_prompt}] + incoming
@@ -289,5 +290,6 @@ def api_chat_messages(session_id: str, current_user: User = Depends(get_current_
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
-
+# A fresh checkout can serve APIs before the optional frontend is built.
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

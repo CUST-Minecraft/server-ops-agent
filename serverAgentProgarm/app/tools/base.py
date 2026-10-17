@@ -30,6 +30,8 @@ class Tool:
     parameters:dict[str, object]
     handler:Callable[[dict], dict | ToolResult]
     risk_level: str = "low"     # "low" | "medium" | "high"；默认低风险（只读）
+    # 可选：供 invocation 与审计脱敏；执行和权限检查仍使用实际参数。
+    observability_filter: Callable[[dict], dict] | None = None
 
 
 

@@ -1,5 +1,6 @@
 """serveragent 主 CLI：操作员的唯一门面。"""
 from datetime import datetime, timezone
+import json
 from uuid import uuid4
 
 import typer
@@ -7,6 +8,56 @@ import typer
 from app import setup_logging
 
 app = typer.Typer(help="ServerOpsAgent -- 智能服务器监测与自动运维 Agent")
+knowledge_app = typer.Typer(help="Verified Recovery 知识案例管理")
+app.add_typer(knowledge_app, name="knowledge")
+mcp_app = typer.Typer(help="检查本地 stdio MCP Server 的工具与契约")
+app.add_typer(mcp_app, name="mcp")
+
+
+@mcp_app.command("tools")
+def mcp_tools(config: str = typer.Option("mcp.json", "--config")):
+    """显式启动配置的本地程序，发现工具并打印指纹；不调用领域工具。"""
+    import asyncio
+    from app.mcp.client import discover_tools
+    from app.mcp.config import MCPConfigError, load_mcp_config
+    from app.tools.mcp import build_mcp_tool
+
+    try:
+        definition = load_mcp_config(config)
+    except MCPConfigError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1)
+    failed = False
+    for server in definition.servers:
+        try:
+            catalog = asyncio.run(discover_tools(server))
+        except Exception as error:
+            typer.echo(f"{server.id}: 发现失败（{type(error).__name__}；原文已隐藏）", err=True)
+            failed = True
+            continue
+        configured = {tool.remote_name: tool for tool in server.tools}
+        observed_names = set()
+        for observed in catalog:
+            observed_names.add(observed.name)
+            allowed = configured.get(observed.name)
+            state, alias = "未列入白名单", "-"
+            if allowed:
+                alias = allowed.local_name
+                try:
+                    build_mcp_tool(server, allowed, observed)
+                    state = "可准入"
+                except Exception as error:
+                    state = f"拒绝（{type(error).__name__}）"
+                    failed = True
+            # 外部名字也只输出固定长度；不打印原始 Schema、stderr 或环境值。
+            name = observed.name if observed.name.isidentifier() and len(observed.name) <= 64 else "<非常规工具名>"
+            typer.echo(f"{server.id} / {name} -> {alias} [{state}]")
+            typer.echo(f"  contract_sha256={observed.contract_sha256}")
+        for name in configured.keys() - observed_names:
+            typer.echo(f"{server.id}: 白名单中的工具缺失", err=True)
+            failed = True
+    if failed:
+        raise typer.Exit(1)
 
 
 def _authenticate_cli_user(username: str, password: str):
@@ -126,6 +177,90 @@ def reject(approval_id: int):
     print(approval.reject(approval_id))
 
 
+@knowledge_app.command("cases")
+def knowledge_cases(status: str | None = typer.Option(None, "--status")):
+    """查看自动生成的 recovery case。"""
+    from app.storage.db import SessionLocal, init_db
+    from app.storage.models import RecoveryCaseRecord
+
+    init_db()
+    with SessionLocal() as session:
+        query = session.query(RecoveryCaseRecord).order_by(RecoveryCaseRecord.id.desc())
+        if status:
+            query = query.filter(RecoveryCaseRecord.index_status == status)
+        for case in query.limit(50):
+            print(
+                f"#{case.id} incident={case.source_incident_id} "
+                f"remediation={case.source_remediation_record_id} "
+                f"{case.outcome}/{case.record_status}/{case.index_status} "
+                f"signature={case.occurrence_signature}"
+            )
+
+
+@knowledge_app.command("sync")
+def knowledge_sync():
+    """将 verified recovery case 同步到本地索引。"""
+    from app.config import ServerSettings
+    from app.knowledge.embeddings import build_embedding_provider
+    from app.knowledge.indexer import RecoveryIndexer
+    from app.storage.db import SessionLocal, init_db
+
+    settings = ServerSettings()
+    init_db()
+    count = RecoveryIndexer(
+        SessionLocal,
+        settings.recovery_index_path,
+        build_embedding_provider(settings),
+        origin=settings.recovery_case_origin,
+    ).sync()
+    print(f"已同步 {count} 个 recovery case 文档")
+
+
+@knowledge_app.command("search-cases")
+def knowledge_search_cases(
+    query: str = typer.Argument(...),
+    service: str | None = typer.Option(None, "--service"),
+):
+    """检索历史 verified recovery case。"""
+    from app.config import ServerSettings
+    from app.knowledge.embeddings import build_embedding_provider
+    from app.knowledge.retriever import RecoveryIndex
+
+    settings = ServerSettings()
+    result = RecoveryIndex(
+        settings.recovery_index_path,
+        build_embedding_provider(settings),
+        dense_min_score=settings.recovery_dense_min_score,
+        candidate_limit=settings.recovery_candidate_limit,
+        rrf_k=settings.recovery_rrf_k,
+    ).search(query, service=service, top_k=settings.recovery_top_k)
+    print(json.dumps({
+        "status": result.status,
+        "corpus_version": result.corpus_version,
+        "degraded": result.degraded,
+        "hits": [hit.__dict__ for hit in result.hits],
+        "error": result.error,
+    }, ensure_ascii=False, default=str, indent=2))
+
+
+@knowledge_app.command("revoke-case")
+def knowledge_revoke_case(case_id: int, reason: str = typer.Option(..., "--reason")):
+    """撤销错误或过时的 recovery case。"""
+    from app.storage.db import SessionLocal, init_db
+    from app.storage.models import RecoveryCaseRecord
+
+    init_db()
+    with SessionLocal() as session:
+        case = session.get(RecoveryCaseRecord, case_id)
+        if case is None:
+            raise typer.BadParameter(f"case 不存在: {case_id}")
+        case.record_status = "revoked"
+        case.revoked_at = datetime.now(timezone.utc)
+        case.failure_reason = reason
+        session.commit()
+    print(f"已撤销 case #{case_id}")
+
+
 @app.command()
 def chat():
     """与 Agent 手动对话（诊断/问答入口）"""
@@ -149,7 +284,7 @@ def chat():
     session_id = f"cli_{uuid4().hex}"
 
     # 已给：对话循环与 Day 3 demo/agent_chat 相同，装配换 runtime_deps
-    executor, registry, approval = build_executor_and_approvals()
+    executor, registry, approval = build_executor_and_approvals(include_mcp=True)
     llm = LLMClient()
     settings = ServerSettings()
     context = {}

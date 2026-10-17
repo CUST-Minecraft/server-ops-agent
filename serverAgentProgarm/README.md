@@ -1,85 +1,68 @@
 # serverAgentProgarm
 
-ServerOpsAgent 的 Python 主程序目录。项目定位、内置工具、自定义工具契约和目标机权限边界见仓库根目录的 [README.md](../README.md)。
-
-这里保留开发环境和运行边界说明；完整部署、初始化和日常操作手册暂不放在本文件中。
+ServerOpsAgent 的 Python 主程序。完整安装、配置、权限和运行边界见仓库根目录 [README.md](../README.md)；英文说明见 [README.en.md](../README.en.md)。
 
 ## 开发环境
 
 ```bash
-uv sync
+uv sync --locked
 cp .env.example .env
+mkdir -p data
 ```
 
-`.env` 至少需要提供以下必填项：
+Windows 可使用 `New-Item -ItemType Directory -Force data` 创建数据库目录。目标机、数据库与日志配置包括 `SERVER_HOST / SERVER_USER / KEY_PATH / DB_URL / LOG_LEVEL`；调查、CLI chat 和 Web chat 另需 `API_KEY / BASE_URL / MODEL_ID`。凭据只放在本地环境或密钥管理系统。
 
-```text
-SERVER_HOST
-SERVER_USER
-KEY_PATH
-DB_URL
-LOG_LEVEL
+默认 `MCP_ENABLED=false`、`RECOVERY_RAG_ENABLED=true`。RAG 的 Ollama 服务和模型需单独准备；不需要检索时可设 `RECOVERY_RAG_ENABLED=false`。
+
+## MCP 只读工具
+
+先运行完整离线链路：
+
+```bash
+uv run python -m demo.mcp_smoke
 ```
 
-运行自治调查、CLI chat 或 Web chat 时还需要 LLM 配置：
+该演示使用真实 MCP 子进程和原 Agent Loop，模型与业务数据为模拟，不访问 SSH、真实 LLM 或业务数据库。
 
-```text
-API_KEY
-BASE_URL
-MODEL_ID
+实际接入时复制 `mcp.example.json` 为 `mcp.json`，将 `command / cwd` 占位路径替换为本机绝对路径，再运行：
+
+```bash
+uv run serveragent mcp tools --config mcp.json
 ```
 
-选填项及默认值见仓库根目录 [README.md](../README.md) 的配置表和 `.env.example`；其中 `SERVER_PORT` 默认为 `22`，监控、审批、策略、阈值和上下文压缩参数均有默认值。
+检查通过后才在本地配置启用 MCP。完整步骤、参数范围、契约指纹和环境变量边界见根 README 的“MCP 工具扩展”章节。MCP 不替代基础监控，也不开放外部写工具。
 
-目标机地址、SSH 私钥和 LLM API Key 只放在本地环境变量或密钥管理系统中，不提交到 Git。
+## 历史修复检索
+
+已配置数据库后可查看案例和重建派生索引：
+
+```bash
+uv run serveragent knowledge cases
+uv run serveragent knowledge sync
+uv run serveragent knowledge search-cases "nginx 服务异常" --service nginx
+```
+
+历史案例仅供参考，执行仍由策略、审批和 Verifier 约束。首次建库与已有库升级的差别见根 README；`create_all` 不会迁移已有表。
 
 ## 目标机权限边界
 
-Agent 通过 SSH 使用受限的 `opsagent` 账号。目标机只需要允许 Agent 主机访问 TCP `22`，并安装公钥认证；不要给 `opsagent` 全量 root、全量 sudo 或 Docker 管理权限。
-
-只读工具执行以下命令，不需要 sudo：
-
-```text
-top -bn1 | grep 'Cpu(s)' ; uptime
-free -m
-systemctl is-active <validated service>
-```
-
-如果需要完整读取 systemd journal，应优先配置 per-service 访问；将 `opsagent` 加入 `systemd-journal` 会扩大日志可见范围，可能读取到个人网站的敏感数据。
-
-当前写工具只执行以下精确命令：
-
-```text
-sudo -n systemctl restart nginx
-sudo -n systemctl restart docker
-```
-
-匹配的 sudoers 规则：
+SSH 使用受限账号，按需授予 journal 读取权限。内置写工具需要精确的 sudoers 白名单：
 
 ```text
 opsagent ALL=(root) NOPASSWD: /usr/bin/systemctl restart nginx, /usr/bin/systemctl restart docker
 ```
 
-实际路径以目标机的 `command -v systemctl` 为准。sudoers 文件使用 `0440` 权限，并通过 `visudo -c` 校验。
-
-禁止使用：
-
-```text
-opsagent ALL=(root) NOPASSWD: ALL
-opsagent ALL=(root) NOPASSWD: /usr/bin/systemctl
-opsagent ALL=(root) NOPASSWD: /usr/bin/docker
-usermod -aG docker opsagent
-```
-
-当前 SSH 客户端仍需要生产化补充 Host Key pinning；在不可信网络中使用前，必须确认目标机指纹校验方案。
+路径以目标机 `command -v systemctl` 为准，文件权限 `0440`，并通过 `visudo -c` 校验。新增服务同样逐条授权；禁止全量 sudo、全量 systemctl 或 Docker 管理权限。当前 SSH 主机指纹校验仍需加固。
 
 ## 离线验证
 
-测试不连接真实服务器、LLM 或 MySQL：
-
 ```bash
 uv run pytest -q
-uv run python -m compileall -q app tests
+uv run python -m compileall -q app tests demo scripts
+uv run python -m demo.mcp_smoke
+uv run python -m scripts.eval_rag --embedding-provider hash --json
 ```
 
-Web 前端位于 `web/`，构建产物写入上级 `static/`，该目录不进入 Git。生产或演示前需要单独执行前端构建。
+测试使用 FakeSSH、FakeLLM、内存 SQLite 和本地 MCP 子进程，不依赖真实服务器或模型服务。前端位于 `web/`，仍需按根 README 单独测试和构建；生成的 `static/` 不进入 Git。
+
+`mcp.json`、`.env`、`.knowledge/`、业务数据库、记忆与日志均为本地数据；`docs/` 为私有学习记录，不发布到 GitHub。

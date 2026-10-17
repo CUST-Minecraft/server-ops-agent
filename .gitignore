@@ -41,3 +41,12 @@ docs_*.rar
 .vscode/
 .DS_Store
 Thumbs.db
+
+# ===== RAG 派生索引（运行时生成，可重建） =====
+.knowledge/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# ===== MCP 本机路径与工具准入配置 =====
+mcp.json

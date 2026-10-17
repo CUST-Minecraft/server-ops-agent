@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "servers": [
+    {
+      "id": "dbdiag",
+      "transport": "stdio",
+      "command": "/absolute/path/to/server-ops-agent/serverAgentProgarm/.venv/bin/python",
+      "args": [
+        "demo/mcp_dbdiag_server.py"
+      ],
+      "cwd": "/absolute/path/to/server-ops-agent/serverAgentProgarm",
+      "env_vars": [],
+      "timeout_seconds": 10,
+      "tools": [
+        {
+          "remote_name": "get_db_connections",
+          "local_name": "mcp_dbdiag_get_db_connections",
+          "description": "只读查询教学数据库连接数（合成数据），不会连接真实数据库或修改服务。",
+          "risk_level": "low",
+          "expected_contract_sha256": "12714968680579a2384f3a0a565b74c8102971ac65a2f62bd30f090804d2f00c",
+          "allowed_arguments": {
+            "database": [
+              "shop",
+              "empty"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

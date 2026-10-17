@@ -68,6 +68,63 @@ def build_readonly_tools(ssh: SSHClient) -> list[Tool]:
         return {"port": port, "port_open": r["stdout"].strip().endswith("OPEN"),
                 "elapsed_ms": r["elapsed"]}
 
+    def service_details(args: dict) -> dict:
+        service = validate_service_name(args["service"])
+        r = _run(
+            ssh,
+            "systemctl show "
+            f"{service} --property=ActiveState,SubState,MainPID,"
+            "ExecMainStartTimestamp,FragmentPath --no-pager",
+        )
+        values: dict[str, str] = {}
+        for line in r["stdout"].splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value
+        main_pid = values.get("MainPID", "0")
+        return {
+            "service": service,
+            "active_state": values.get("ActiveState", "unknown"),
+            "sub_state": values.get("SubState", "unknown"),
+            "main_pid": int(main_pid) if main_pid.isdigit() else None,
+            "started_at": values.get("ExecMainStartTimestamp", ""),
+            "unit_path": values.get("FragmentPath", ""),
+        }
+
+    def top_processes(_args: dict) -> dict:
+        r = _run(ssh, "ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu | head -n 15")
+        processes = []
+        for line in r["stdout"].splitlines()[1:]:
+            fields = line.split(None, 4)
+            if len(fields) != 5:
+                continue
+            pid, command, cpu, memory, rss = fields
+            try:
+                processes.append({
+                    "pid": int(pid),
+                    "command": command,
+                    "cpu_pct": float(cpu),
+                    "mem_pct": float(memory),
+                    "rss_kb": int(rss),
+                })
+            except ValueError:
+                continue
+        return {"processes": processes}
+
+    def listening_ports(_args: dict) -> dict:
+        r = _run(ssh, "ss -lntH")
+        ports = []
+        for line in r["stdout"].splitlines():
+            fields = line.split()
+            if len(fields) < 4:
+                continue
+            local = fields[3]
+            port_text = local.rsplit(":", 1)[-1]
+            if not port_text.isdigit():
+                continue
+            ports.append({"address": local.rsplit(":", 1)[0], "port": int(port_text)})
+        return {"ports": ports}
+
 
 
     return [
@@ -103,11 +160,25 @@ def build_readonly_tools(ssh: SSHClient) -> list[Tool]:
              handler=read_service_logs),
         Tool(name="tcp_probe",
              description="探测目标服务器本机某 TCP 端口是否有进程监听（判断服务真实可用性）",
+              parameters={"type": "object",
+                          "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535,
+                                                  "description": "端口号，如 80、3306"}},
+                          "required": ["port"]},
+              handler=tcp_probe),
+        Tool(name="get_service_details",
+             description="查询 systemd 服务状态、主进程 PID、启动时间和 unit 路径",
              parameters={"type": "object",
-                         "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535,
-                                                 "description": "端口号，如 80、3306"}},
-                         "required": ["port"]},
-             handler=tcp_probe),
+                         "properties": {"service": {"type": "string"}},
+                         "required": ["service"]},
+             handler=service_details),
+        Tool(name="get_top_processes",
+             description="获取 CPU 排名前列的进程摘要，用于定位资源压力来源",
+             parameters={"type": "object", "properties": {}},
+             handler=top_processes),
+        Tool(name="get_listening_ports",
+             description="列出目标机当前监听的 TCP 端口，用于核验服务可用性",
+             parameters={"type": "object", "properties": {}},
+             handler=listening_ports),
     ]
 
 

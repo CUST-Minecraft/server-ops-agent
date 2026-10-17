@@ -1,0 +1,806 @@
+{
+  "documents": [
+    {
+      "case_id": "case-nginx-inactive_port80",
+      "source_incident_ids": [
+        2001
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-inactive_port80",
+      "service": "nginx",
+      "text": "nginx systemd service inactive and port 80 closed; restarting nginx restored the HTTP listener"
+    },
+    {
+      "case_id": "case-nginx-upstream_502",
+      "source_incident_ids": [
+        2002
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-upstream_502",
+      "service": "nginx",
+      "text": "nginx active and port 80 open but reverse proxy returned 502 because the upstream backend was unavailable; restarting nginx restored proxy responses"
+    },
+    {
+      "case_id": "case-nginx-config_syntax",
+      "source_incident_ids": [
+        2003
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-config_syntax",
+      "service": "nginx",
+      "text": "nginx reload failed after a configuration syntax error; correcting the config and restarting nginx restored the worker processes"
+    },
+    {
+      "case_id": "case-nginx-tls_handshake",
+      "source_incident_ids": [
+        2004
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-tls_handshake",
+      "service": "nginx",
+      "text": "nginx HTTPS listener reported TLS handshake failures after a certificate reload; restarting nginx loaded the corrected certificate"
+    },
+    {
+      "case_id": "case-nginx-worker_connections",
+      "source_incident_ids": [
+        2005
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-worker_connections",
+      "service": "nginx",
+      "text": "nginx worker connections were exhausted and requests timed out; restarting nginx cleared stale workers and restored request handling"
+    },
+    {
+      "case_id": "case-docker-daemon_inactive_3306",
+      "source_incident_ids": [
+        2006
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-docker-daemon_inactive_3306",
+      "service": "docker",
+      "text": "docker daemon inactive; the MySQL container became unreachable and TCP port 3306 refused connections; restarting docker restored MySQL connectivity"
+    },
+    {
+      "case_id": "case-docker-container_restart_loop",
+      "source_incident_ids": [
+        2007
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-docker-container_restart_loop",
+      "service": "docker",
+      "text": "docker container repeatedly restarted after an unhealthy deployment; restarting docker cleared the stuck container state"
+    },
+    {
+      "case_id": "case-docker-bridge_network",
+      "source_incident_ids": [
+        2008
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-docker-bridge_network",
+      "service": "docker",
+      "text": "docker bridge networking stopped forwarding container traffic; restarting docker recreated the bridge and restored connectivity"
+    },
+    {
+      "case_id": "case-docker-overlay2_disk",
+      "source_incident_ids": [
+        2009
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-docker-overlay2_disk",
+      "service": "docker",
+      "text": "docker overlay2 storage reached a corrupted mount state; restarting docker remounted storage and restored containers"
+    },
+    {
+      "case_id": "case-docker-socket_permission",
+      "source_incident_ids": [
+        2010
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-docker-socket_permission",
+      "service": "docker",
+      "text": "docker socket requests failed with permission errors after daemon reload; restarting docker restored the socket"
+    },
+    {
+      "case_id": "case-redis-service_down_6379",
+      "source_incident_ids": [
+        2011
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-redis-service_down_6379",
+      "service": "redis",
+      "text": "redis service inactive and port 6379 closed; restarting redis restored the cache listener"
+    },
+    {
+      "case_id": "case-redis-maxmemory_eviction",
+      "source_incident_ids": [
+        2012
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-redis-maxmemory_eviction",
+      "service": "redis",
+      "text": "redis hit maxmemory pressure and evicted keys continuously; restarting redis cleared a stale workload"
+    },
+    {
+      "case_id": "case-redis-replication_lag",
+      "source_incident_ids": [
+        2013
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-redis-replication_lag",
+      "service": "redis",
+      "text": "redis replica fell behind the primary after a stalled process; restarting redis restored replication"
+    },
+    {
+      "case_id": "case-redis-connection_refused",
+      "source_incident_ids": [
+        2014
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-redis-connection_refused",
+      "service": "redis",
+      "text": "redis clients received connection refused while the service unit was unhealthy; restarting redis restored connections"
+    },
+    {
+      "case_id": "case-redis-slowlog_latency",
+      "source_incident_ids": [
+        2015
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-redis-slowlog_latency",
+      "service": "redis",
+      "text": "redis latency increased after a blocked command; restarting redis cleared the blocked worker"
+    },
+    {
+      "case_id": "case-postgresql-service_down_5432",
+      "source_incident_ids": [
+        2016
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-postgresql-service_down_5432",
+      "service": "postgresql",
+      "text": "postgresql inactive and port 5432 refused connections; restarting postgresql restored the database listener"
+    },
+    {
+      "case_id": "case-postgresql-too_many_connections",
+      "source_incident_ids": [
+        2017
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-postgresql-too_many_connections",
+      "service": "postgresql",
+      "text": "postgresql reached its connection limit and new clients failed; restarting postgresql released stale sessions"
+    },
+    {
+      "case_id": "case-postgresql-replication_lag",
+      "source_incident_ids": [
+        2018
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-postgresql-replication_lag",
+      "service": "postgresql",
+      "text": "postgresql standby replication lag grew after a stuck wal receiver; restarting postgresql restored streaming"
+    },
+    {
+      "case_id": "case-postgresql-disk_full",
+      "source_incident_ids": [
+        2019
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-postgresql-disk_full",
+      "service": "postgresql",
+      "text": "postgresql could not write WAL because the data disk was full; cleanup followed by restart restored writes"
+    },
+    {
+      "case_id": "case-postgresql-auth_failure",
+      "source_incident_ids": [
+        2020
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-postgresql-auth_failure",
+      "service": "postgresql",
+      "text": "postgresql authentication failures followed a bad reload; restarting postgresql loaded the corrected authentication configuration"
+    },
+    {
+      "case_id": "case-ssh-service_down_22",
+      "source_incident_ids": [
+        2021
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-ssh-service_down_22",
+      "service": "ssh",
+      "text": "sshd inactive and TCP port 22 closed; restarting ssh restored remote login"
+    },
+    {
+      "case_id": "case-ssh-key_auth_failure",
+      "source_incident_ids": [
+        2022
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-ssh-key_auth_failure",
+      "service": "ssh",
+      "text": "sshd rejected public keys after a reload; restarting ssh loaded the corrected authorized key configuration"
+    },
+    {
+      "case_id": "case-ssh-max_sessions",
+      "source_incident_ids": [
+        2023
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-ssh-max_sessions",
+      "service": "ssh",
+      "text": "sshd reached its session limit and new connections timed out; restarting ssh cleared stale sessions"
+    },
+    {
+      "case_id": "case-ssh-fail2ban_lockout",
+      "source_incident_ids": [
+        2024
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-ssh-fail2ban_lockout",
+      "service": "ssh",
+      "text": "sshd traffic was blocked by a stale fail2ban state; restarting ssh restored the listener"
+    },
+    {
+      "case_id": "case-ssh-config_syntax",
+      "source_incident_ids": [
+        2025
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-ssh-config_syntax",
+      "service": "ssh",
+      "text": "sshd reload failed because of a syntax error; correcting the config and restarting ssh restored login"
+    },
+    {
+      "case_id": "case-rabbitmq-service_down_5672",
+      "source_incident_ids": [
+        2026
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-rabbitmq-service_down_5672",
+      "service": "rabbitmq",
+      "text": "rabbitmq inactive and port 5672 closed; restarting rabbitmq restored broker connections"
+    },
+    {
+      "case_id": "case-rabbitmq-queue_backlog",
+      "source_incident_ids": [
+        2027
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-rabbitmq-queue_backlog",
+      "service": "rabbitmq",
+      "text": "rabbitmq queue backlog grew after a stuck consumer; restarting rabbitmq restored delivery"
+    },
+    {
+      "case_id": "case-rabbitmq-disk_alarm",
+      "source_incident_ids": [
+        2028
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-rabbitmq-disk_alarm",
+      "service": "rabbitmq",
+      "text": "rabbitmq entered a disk alarm and blocked publishers; restarting rabbitmq after cleanup restored publishing"
+    },
+    {
+      "case_id": "case-rabbitmq-memory_alarm",
+      "source_incident_ids": [
+        2029
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-rabbitmq-memory_alarm",
+      "service": "rabbitmq",
+      "text": "rabbitmq entered a memory alarm after a workload spike; restarting rabbitmq cleared stale memory pressure"
+    },
+    {
+      "case_id": "case-rabbitmq-cluster_partition",
+      "source_incident_ids": [
+        2030
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-rabbitmq-cluster_partition",
+      "service": "rabbitmq",
+      "text": "rabbitmq cluster partition left a node isolated; restarting rabbitmq rejoined the node"
+    },
+    {
+      "case_id": "case-elasticsearch-cluster_red",
+      "source_incident_ids": [
+        2031
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-elasticsearch-cluster_red",
+      "service": "elasticsearch",
+      "text": "elasticsearch cluster health turned red and search requests timed out; restarting the affected node restored search"
+    },
+    {
+      "case_id": "case-elasticsearch-unassigned_shards",
+      "source_incident_ids": [
+        2032
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-elasticsearch-unassigned_shards",
+      "service": "elasticsearch",
+      "text": "elasticsearch had unassigned shards after a node restart; restarting the affected node restored shard allocation"
+    },
+    {
+      "case_id": "case-elasticsearch-disk_watermark",
+      "source_incident_ids": [
+        2033
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-elasticsearch-disk_watermark",
+      "service": "elasticsearch",
+      "text": "elasticsearch crossed the disk watermark and stopped allocating shards; cleanup and restart restored allocation"
+    },
+    {
+      "case_id": "case-elasticsearch-heap_pressure",
+      "source_incident_ids": [
+        2034
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-elasticsearch-heap_pressure",
+      "service": "elasticsearch",
+      "text": "elasticsearch JVM heap pressure caused long garbage collection pauses; restarting the node restored latency"
+    },
+    {
+      "case_id": "case-elasticsearch-node_disconnected",
+      "source_incident_ids": [
+        2035
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-elasticsearch-node_disconnected",
+      "service": "elasticsearch",
+      "text": "elasticsearch node disconnected from the cluster after a transport failure; restarting the node restored membership"
+    },
+    {
+      "case_id": "case-mysql-service_down_3306",
+      "source_incident_ids": [
+        2036
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-mysql-service_down_3306",
+      "service": "mysql",
+      "text": "mysql service inactive and port 3306 closed; restarting mysql restored database connections"
+    },
+    {
+      "case_id": "case-mysql-too_many_connections",
+      "source_incident_ids": [
+        2037
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-mysql-too_many_connections",
+      "service": "mysql",
+      "text": "mysql reached max connections and clients failed; restarting mysql released stale sessions"
+    },
+    {
+      "case_id": "case-mysql-deadlock",
+      "source_incident_ids": [
+        2038
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-mysql-deadlock",
+      "service": "mysql",
+      "text": "mysql workload accumulated deadlocked sessions and requests stalled; restarting mysql cleared the stuck sessions"
+    },
+    {
+      "case_id": "case-mysql-replication_lag",
+      "source_incident_ids": [
+        2039
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-mysql-replication_lag",
+      "service": "mysql",
+      "text": "mysql replica lag grew after a stalled SQL thread; restarting mysql restored replication"
+    },
+    {
+      "case_id": "case-mysql-disk_full",
+      "source_incident_ids": [
+        2040
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-mysql-disk_full",
+      "service": "mysql",
+      "text": "mysql could not write binary logs because the disk was full; cleanup and restart restored writes"
+    },
+    {
+      "case_id": "case-haproxy-service_down_443",
+      "source_incident_ids": [
+        2041
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-haproxy-service_down_443",
+      "service": "haproxy",
+      "text": "haproxy inactive and port 443 closed; restarting haproxy restored the TLS listener"
+    },
+    {
+      "case_id": "case-haproxy-backend_503",
+      "source_incident_ids": [
+        2042
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-haproxy-backend_503",
+      "service": "haproxy",
+      "text": "haproxy active but backends returned 503 after a stale health state; restarting haproxy refreshed backend checks"
+    },
+    {
+      "case_id": "case-haproxy-config_syntax",
+      "source_incident_ids": [
+        2043
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-haproxy-config_syntax",
+      "service": "haproxy",
+      "text": "haproxy reload failed due to a configuration syntax error; correcting the config and restarting restored traffic"
+    },
+    {
+      "case_id": "case-haproxy-certificate_expiry",
+      "source_incident_ids": [
+        2044
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-haproxy-certificate_expiry",
+      "service": "haproxy",
+      "text": "haproxy TLS handshakes failed after an expired certificate; replacing the certificate and restarting restored HTTPS"
+    },
+    {
+      "case_id": "case-haproxy-connection_saturation",
+      "source_incident_ids": [
+        2045
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-haproxy-connection_saturation",
+      "service": "haproxy",
+      "text": "haproxy connection slots were saturated and clients timed out; restarting haproxy cleared stale sessions"
+    },
+    {
+      "case_id": "case-kafka-broker_down_9092",
+      "source_incident_ids": [
+        2046
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-kafka-broker_down_9092",
+      "service": "kafka",
+      "text": "kafka broker inactive and port 9092 closed; restarting kafka restored broker connectivity"
+    },
+    {
+      "case_id": "case-kafka-consumer_lag",
+      "source_incident_ids": [
+        2047
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-kafka-consumer_lag",
+      "service": "kafka",
+      "text": "kafka consumer lag grew after a stuck consumer group; restarting kafka restored consumption"
+    },
+    {
+      "case_id": "case-kafka-under_replicated",
+      "source_incident_ids": [
+        2048
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-kafka-under_replicated",
+      "service": "kafka",
+      "text": "kafka partitions became under replicated after a broker fault; restarting kafka restored replicas"
+    },
+    {
+      "case_id": "case-kafka-partition_rebalance",
+      "source_incident_ids": [
+        2049
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-kafka-partition_rebalance",
+      "service": "kafka",
+      "text": "kafka partition rebalance stalled after a coordinator issue; restarting kafka restored assignment"
+    },
+    {
+      "case_id": "case-kafka-disk_full",
+      "source_incident_ids": [
+        2050
+      ],
+      "origin": "synthetic_eval",
+      "signature": "sig-kafka-disk_full",
+      "service": "kafka",
+      "text": "kafka broker stopped accepting writes because its log disk was full; cleanup and restart restored writes"
+    }
+  ],
+  "cases": [
+    {
+      "query": "nginx stopped and port 80 is closed",
+      "service": "nginx",
+      "expected_case_id": "case-nginx-inactive_port80"
+    },
+    {
+      "query": "nginx returns 502 upstream errors while the service is active",
+      "service": "nginx",
+      "expected_case_id": "case-nginx-upstream_502"
+    },
+    {
+      "query": "nginx reload fails because of a configuration syntax error",
+      "service": "nginx",
+      "expected_case_id": "case-nginx-config_syntax"
+    },
+    {
+      "query": "nginx TLS handshake fails after certificate reload",
+      "service": "nginx",
+      "expected_case_id": "case-nginx-tls_handshake"
+    },
+    {
+      "query": "nginx worker connections exhausted and requests time out",
+      "service": "nginx",
+      "expected_case_id": "case-nginx-worker_connections"
+    },
+    {
+      "query": "docker is inactive and MySQL port 3306 refuses connections",
+      "service": "docker",
+      "expected_case_id": "case-docker-daemon_inactive_3306"
+    },
+    {
+      "query": "docker container is stuck in a restart loop",
+      "service": "docker",
+      "expected_case_id": "case-docker-container_restart_loop"
+    },
+    {
+      "query": "docker bridge network stopped forwarding traffic",
+      "service": "docker",
+      "expected_case_id": "case-docker-bridge_network"
+    },
+    {
+      "query": "docker overlay2 storage mount is unhealthy",
+      "service": "docker",
+      "expected_case_id": "case-docker-overlay2_disk"
+    },
+    {
+      "query": "docker socket returns permission errors after reload",
+      "service": "docker",
+      "expected_case_id": "case-docker-socket_permission"
+    },
+    {
+      "query": "redis is down and port 6379 is closed",
+      "service": "redis",
+      "expected_case_id": "case-redis-service_down_6379"
+    },
+    {
+      "query": "redis maxmemory pressure causes continuous evictions",
+      "service": "redis",
+      "expected_case_id": "case-redis-maxmemory_eviction"
+    },
+    {
+      "query": "redis replica replication lag is increasing",
+      "service": "redis",
+      "expected_case_id": "case-redis-replication_lag"
+    },
+    {
+      "query": "redis clients receive connection refused",
+      "service": "redis",
+      "expected_case_id": "case-redis-connection_refused"
+    },
+    {
+      "query": "redis latency is high after a blocked command",
+      "service": "redis",
+      "expected_case_id": "case-redis-slowlog_latency"
+    },
+    {
+      "query": "postgresql is inactive and port 5432 refuses connections",
+      "service": "postgresql",
+      "expected_case_id": "case-postgresql-service_down_5432"
+    },
+    {
+      "query": "postgresql has too many connections",
+      "service": "postgresql",
+      "expected_case_id": "case-postgresql-too_many_connections"
+    },
+    {
+      "query": "postgresql standby replication lag is growing",
+      "service": "postgresql",
+      "expected_case_id": "case-postgresql-replication_lag"
+    },
+    {
+      "query": "postgresql WAL writes fail because the disk is full",
+      "service": "postgresql",
+      "expected_case_id": "case-postgresql-disk_full"
+    },
+    {
+      "query": "postgresql authentication fails after configuration reload",
+      "service": "postgresql",
+      "expected_case_id": "case-postgresql-auth_failure"
+    },
+    {
+      "query": "sshd is inactive and port 22 is closed",
+      "service": "ssh",
+      "expected_case_id": "case-ssh-service_down_22"
+    },
+    {
+      "query": "SSH public key authentication fails after reload",
+      "service": "ssh",
+      "expected_case_id": "case-ssh-key_auth_failure"
+    },
+    {
+      "query": "sshd reached its maximum session count",
+      "service": "ssh",
+      "expected_case_id": "case-ssh-max_sessions"
+    },
+    {
+      "query": "SSH access is blocked by a stale ban state",
+      "service": "ssh",
+      "expected_case_id": "case-ssh-fail2ban_lockout"
+    },
+    {
+      "query": "sshd reload fails with a configuration syntax error",
+      "service": "ssh",
+      "expected_case_id": "case-ssh-config_syntax"
+    },
+    {
+      "query": "rabbitmq is down and port 5672 is closed",
+      "service": "rabbitmq",
+      "expected_case_id": "case-rabbitmq-service_down_5672"
+    },
+    {
+      "query": "rabbitmq queue backlog grows because consumers are stuck",
+      "service": "rabbitmq",
+      "expected_case_id": "case-rabbitmq-queue_backlog"
+    },
+    {
+      "query": "rabbitmq disk alarm blocks publishers",
+      "service": "rabbitmq",
+      "expected_case_id": "case-rabbitmq-disk_alarm"
+    },
+    {
+      "query": "rabbitmq memory alarm is active",
+      "service": "rabbitmq",
+      "expected_case_id": "case-rabbitmq-memory_alarm"
+    },
+    {
+      "query": "rabbitmq cluster partition isolates a node",
+      "service": "rabbitmq",
+      "expected_case_id": "case-rabbitmq-cluster_partition"
+    },
+    {
+      "query": "elasticsearch cluster health is red and search times out",
+      "service": "elasticsearch",
+      "expected_case_id": "case-elasticsearch-cluster_red"
+    },
+    {
+      "query": "elasticsearch has unassigned shards",
+      "service": "elasticsearch",
+      "expected_case_id": "case-elasticsearch-unassigned_shards"
+    },
+    {
+      "query": "elasticsearch disk watermark blocks shard allocation",
+      "service": "elasticsearch",
+      "expected_case_id": "case-elasticsearch-disk_watermark"
+    },
+    {
+      "query": "elasticsearch heap pressure causes long GC pauses",
+      "service": "elasticsearch",
+      "expected_case_id": "case-elasticsearch-heap_pressure"
+    },
+    {
+      "query": "elasticsearch node disconnected from the cluster",
+      "service": "elasticsearch",
+      "expected_case_id": "case-elasticsearch-node_disconnected"
+    },
+    {
+      "query": "mysql is inactive and port 3306 is closed",
+      "service": "mysql",
+      "expected_case_id": "case-mysql-service_down_3306"
+    },
+    {
+      "query": "mysql has too many connections",
+      "service": "mysql",
+      "expected_case_id": "case-mysql-too_many_connections"
+    },
+    {
+      "query": "mysql requests stall because of deadlocked sessions",
+      "service": "mysql",
+      "expected_case_id": "case-mysql-deadlock"
+    },
+    {
+      "query": "mysql replication lag is growing",
+      "service": "mysql",
+      "expected_case_id": "case-mysql-replication_lag"
+    },
+    {
+      "query": "mysql binary log writes fail because the disk is full",
+      "service": "mysql",
+      "expected_case_id": "case-mysql-disk_full"
+    },
+    {
+      "query": "haproxy is down and port 443 is closed",
+      "service": "haproxy",
+      "expected_case_id": "case-haproxy-service_down_443"
+    },
+    {
+      "query": "haproxy returns 503 from backends",
+      "service": "haproxy",
+      "expected_case_id": "case-haproxy-backend_503"
+    },
+    {
+      "query": "haproxy reload fails with a configuration syntax error",
+      "service": "haproxy",
+      "expected_case_id": "case-haproxy-config_syntax"
+    },
+    {
+      "query": "haproxy TLS fails because the certificate expired",
+      "service": "haproxy",
+      "expected_case_id": "case-haproxy-certificate_expiry"
+    },
+    {
+      "query": "haproxy connection slots are saturated",
+      "service": "haproxy",
+      "expected_case_id": "case-haproxy-connection_saturation"
+    },
+    {
+      "query": "kafka broker is down and port 9092 is closed",
+      "service": "kafka",
+      "expected_case_id": "case-kafka-broker_down_9092"
+    },
+    {
+      "query": "kafka consumer lag is increasing",
+      "service": "kafka",
+      "expected_case_id": "case-kafka-consumer_lag"
+    },
+    {
+      "query": "kafka partitions are under replicated",
+      "service": "kafka",
+      "expected_case_id": "case-kafka-under_replicated"
+    },
+    {
+      "query": "kafka partition rebalance is stalled",
+      "service": "kafka",
+      "expected_case_id": "case-kafka-partition_rebalance"
+    },
+    {
+      "query": "kafka log disk is full and writes fail",
+      "service": "kafka",
+      "expected_case_id": "case-kafka-disk_full"
+    },
+    {
+      "query": "vault token renewal failure",
+      "service": "vault",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "ceph monitor quorum lost",
+      "service": "ceph",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "consul leader election stalled",
+      "service": "consul",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "minio bucket healing stuck",
+      "service": "minio",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "prometheus scrape timeout",
+      "service": "prometheus",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "postfix mail queue blocked",
+      "service": "postfix",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "memcached eviction storm",
+      "service": "memcached",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "zookeeper session expired",
+      "service": "zookeeper",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "fluentbit log pipeline stopped",
+      "service": "fluentbit",
+      "expected_case_id": "missing"
+    },
+    {
+      "query": "cert-manager certificate renewal failed",
+      "service": null,
+      "expected_case_id": "missing"
+    }
+  ]
+}

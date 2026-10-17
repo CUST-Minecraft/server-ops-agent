@@ -11,13 +11,19 @@ from app.detect.incident_service import IncidentService
 from app.detect.rules import build_rules
 from app.llm.llm_client import LLMClient
 from app.monitor.collector import Collector
-from app.remediation.runbooks import RUNBOOKS
+from app.remediation.runbooks import get_runbooks
 from app.remediation.service import RemediationService
 from app.remediation.verifier import Verifier
 from app.runtime.investigator import Investigator
 from app.security.approval import ApprovalManager
 from app.storage.db import SessionLocal, init_db
-from app.storage.models import ApprovalRequest, Incident, MetricSnapshot, RemediationRecord
+from app.storage.models import (
+    ApprovalRequest,
+    Incident,
+    MetricSnapshot,
+    RemediationContext,
+    RemediationRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +35,7 @@ def run() -> None:
 
     # ---- 装配（全部是老朋友）----
     from app.runtime_deps import build_executor_and_approvals
-    executor, registry, approvals = build_executor_and_approvals()
+    executor, registry, approvals = build_executor_and_approvals(include_mcp=True)
     thresholds = ThresholdSettings()
     services = [s.strip() for s in settings.watched_services.split(",") if s.strip()]
 
@@ -41,23 +47,31 @@ def run() -> None:
     collector = Collector(executor, services)
     investigator = Investigator(LLMClient(), executor, registry)
     remediation = RemediationService(SessionLocal, executor, Verifier(executor))
+    recovery_sync = _build_recovery_sync_coordinator(settings)
+    if recovery_sync is not None and _has_recovery_sync_work():
+        recovery_sync.notify()
 
     logger.info("自治闭环已启动 mode=%s interval=%ss", settings.policy_mode,
                 settings.monitor_interval)
 
-    while True:
-        try:
-            tick(collector, detector, incident_service, approvals, investigator,
-                 remediation, settings)
-        except Exception:                     # noqa: BLE001  值班进程不许死
-            logger.exception("tick 失败（继续运行）")
-        time.sleep(settings.monitor_interval)
+    try:
+        while True:
+            try:
+                tick(collector, detector, incident_service, approvals, investigator,
+                     remediation, settings, recovery_sync)
+            except Exception:                     # noqa: BLE001  值班进程不许死
+                logger.exception("tick 失败（继续运行）")
+            time.sleep(settings.monitor_interval)
+    finally:
+        if recovery_sync is not None:
+            recovery_sync.stop()
 
 
 def tick(collector: Collector, detector: Detector,
          incident_service: IncidentService, approvals: ApprovalManager,
          investigator: Investigator, remediation: RemediationService,
-         settings: ServerSettings) -> None:
+         settings: ServerSettings,
+         recovery_sync=None) -> None:
     # ---- 1) 采集快照 + 入库 ----
     snap = collector.collect()
     with SessionLocal() as session:
@@ -97,7 +111,7 @@ def tick(collector: Collector, detector: Detector,
         open_ids = [inc.id for inc in open_incidents]
 
     for inc_id in open_ids:
-        _handle_open(inc_id, incident_service, investigator, remediation, settings)
+        _handle_open(inc_id, incident_service, investigator, remediation, settings, recovery_sync)
 
     # ---- 5) 对每张 awaiting_approval 的单：查审批单状态 -> 接续验证/失败 ----
     with SessionLocal() as session:
@@ -107,12 +121,12 @@ def tick(collector: Collector, detector: Detector,
         pending_ids = [inc.id for inc in pending_incidents]
 
     for inc_id in pending_ids:
-        _handle_awaiting(inc_id, incident_service, remediation)
+        _handle_awaiting(inc_id, incident_service, remediation, settings, recovery_sync)
 
 
 def _handle_open(inc_id: int, incident_service: IncidentService,
                  investigator: Investigator, remediation: RemediationService,
-                 settings: ServerSettings) -> None:
+                 settings: ServerSettings, recovery_sync=None) -> None:
     """步骤 4：调查一张 open 单子，有预案则执行，无预案则回退重试。"""
     # 先转 investigating（合法转移：open -> investigating）
     if not incident_service.update_status(inc_id, "investigating", note="Runner 开始调查"):
@@ -183,20 +197,32 @@ def _handle_open(inc_id: int, incident_service: IncidentService,
     _write_detail(inc_id, {"investigation_history": history, "investigate_retry_count": 0})
 
     # 有推荐预案：找到 RUNBOOKS 里对应的项
-    rb = next((r for r in RUNBOOKS if r.name == rb_name), None)
+    rb = next((r for r in get_runbooks() if r.name == rb_name), None)
     if rb is None:
         incident_service.update_status(inc_id, "open",
                                        note=f"预案 {rb_name} 不在 RUNBOOKS，回退重试")
         logger.warning("Incident #%s 预案 %s 不在 RUNBOOKS", inc_id, rb_name)
         return
 
-    # 执行预案（走完整权限链：standard 会挂起成审批单）
-    outcome = remediation.execute_runbook(rb, incident_id=inc_id)
+    # 执行预案（走完整权限链：standard 会挂起成审批单）。
+    # snapshot 与 RemediationRecord 一起保存，避免重试后取错 history。
+    investigation_snapshot = {
+        "attempt": len(history),
+        "conclusion": copy.deepcopy(conclusion),
+    }
+    outcome = remediation.execute_runbook(
+        rb,
+        incident_id=inc_id,
+        investigation_attempt=len(history),
+        investigation_snapshot=investigation_snapshot,
+    )
     if outcome == "verified":
         incident_service.update_status(inc_id, "resolved", note=f"根因: {root_cause}")
+        _record_recovery_outcome_if_enabled(settings, remediation.last_record_id, recovery_sync)
         logger.info("Incident #%s 修复验证通过，已 resolved", inc_id)
     elif outcome == "failed":
         incident_service.update_status(inc_id, "failed", note="预案执行失败")
+        _record_recovery_outcome_if_enabled(settings, remediation.last_record_id, recovery_sync)
         logger.warning("Incident #%s 预案 %s 执行失败", inc_id, rb_name)
     elif outcome == "executed_pending_approval":
         incident_service.update_status(inc_id, "awaiting_approval",
@@ -207,13 +233,24 @@ def _handle_open(inc_id: int, incident_service: IncidentService,
 
 
 def _handle_awaiting(inc_id: int, incident_service: IncidentService,
-                     remediation: RemediationService) -> None:
+                     remediation: RemediationService,
+                     settings: ServerSettings | None = None,
+                     recovery_sync=None) -> None:
     """步骤 5：查关联审批单状态，approved 则补验证，rejected/expired 则 failed。"""
     with SessionLocal() as session:
         # 查该 incident 最新一张关联审批单（incident_id 匹配、按 id 倒序第一条）
-        req = (session.query(ApprovalRequest)
-               .filter(ApprovalRequest.incident_id == inc_id)
-               .order_by(ApprovalRequest.id.desc()).first())
+        context = (session.query(RemediationContext)
+                   .filter(
+                       RemediationContext.incident_id == inc_id,
+                       RemediationContext.state == "active",
+                   )
+                   .order_by(RemediationContext.id.desc()).first())
+        req = session.get(ApprovalRequest, context.approval_request_id) \
+            if context and context.approval_request_id else None
+        if req is None:
+            req = (session.query(ApprovalRequest)
+                   .filter(ApprovalRequest.incident_id == inc_id)
+                   .order_by(ApprovalRequest.id.desc()).first())
         if req is None:
             # 没有关联审批单（数据不一致），回退 open 重查
             incident_service.update_status(inc_id, "open", note="无关联审批单，回退重试")
@@ -229,32 +266,46 @@ def _handle_awaiting(inc_id: int, incident_service: IncidentService,
 
     if req_status in ("rejected", "expired"):
         # 人拒绝 / 审批过期 -> failed（不重试：人拒绝 ≠ 再试一次）
+        if context is not None:
+            _mark_context_complete(context.id)
         incident_service.update_status(inc_id, "failed",
                                        note=f"审批单 {req_status}，单子标记 failed")
         logger.warning("Incident #%s 审批单 %s，标记 failed", inc_id, req_status)
         return
 
     if req_status == "approved":
-        # 已批准：接续验证（昨天的缝隙在这里补上）
+        record_id = context.remediation_record_id if context else None
+        # 已批准：接续执行结果与验证（昨天的缝隙在这里补上）
         if req_result != "success":
             # 执行本身失败（虽然批了，但 restart 没跑通）
+            if record_id is not None:
+                with SessionLocal() as session:
+                    record = session.get(RemediationRecord, record_id)
+                    if record is not None:
+                        record.status = "failed"
+                        record.exec_status = req_result
+                        session.commit()
+                _mark_context_complete(context.id if context else None)
+                _record_recovery_outcome_if_enabled(settings, record_id, recovery_sync)
             incident_service.update_status(inc_id, "failed",
                                            note=f"已批准但执行结果 {req_result}")
             logger.warning("Incident #%s 已批准但执行失败: %s", inc_id, req_result)
             return
 
         # 执行成功，补做后置条件验证
-        # 找到该 incident 用的是哪个 runbook（从 remediation_records 查最新一条）
+        # 优先使用 context 精确绑定的记录；旧数据才回退到 incident 查询。
         with SessionLocal() as session:
-            record = (session.query(RemediationRecord)
-                      .filter(RemediationRecord.incident_id == inc_id)
-                      .order_by(RemediationRecord.id.desc()).first())
+            record = session.get(RemediationRecord, record_id) if record_id else None
+            if record is None:
+                record = (session.query(RemediationRecord)
+                          .filter(RemediationRecord.incident_id == inc_id)
+                          .order_by(RemediationRecord.id.desc()).first())
         if record is None:
             incident_service.update_status(inc_id, "failed", note="无修复记录，无法验证")
             logger.warning("Incident #%s approved 但无修复记录", inc_id)
             return
 
-        rb = next((r for r in RUNBOOKS if r.name == record.runbook), None)
+        rb = next((r for r in get_runbooks() if r.name == record.runbook), None)
         if rb is None:
             incident_service.update_status(inc_id, "failed",
                                            note=f"预案 {record.runbook} 不在 RUNBOOKS")
@@ -271,14 +322,17 @@ def _handle_awaiting(inc_id: int, incident_service: IncidentService,
                 rec.verify_evidence = {"checks": vr.evidence}
                 rec.status = "verified" if vr.passed else "failed"
                 session.commit()
+        _mark_context_complete(context.id if context else None)
 
         if vr.passed:
             incident_service.update_status(inc_id, "resolved",
                                            note=f"审批后验证通过: {rb.name}")
+            _record_recovery_outcome_if_enabled(settings, record.id, recovery_sync)
             logger.info("Incident #%s 审批后验证通过，已 resolved", inc_id)
         else:
             incident_service.update_status(inc_id, "failed",
                                            note=f"审批后验证失败: {rb.name}")
+            _record_recovery_outcome_if_enabled(settings, record.id, recovery_sync)
             logger.warning("Incident #%s 审批后验证失败", inc_id)
         return
 
@@ -296,6 +350,72 @@ def _write_detail(inc_id: int, updates: dict) -> None:
         detail.update(updates)
         inc.detail = detail            # 重新赋值，触发 SQLAlchemy JSON 列变更检测
         session.commit()
+
+
+def _mark_context_complete(context_id: int | None) -> None:
+    if context_id is None:
+        return
+    with SessionLocal() as session:
+        context = session.get(RemediationContext, context_id)
+        if context is not None:
+            context.state = "completed"
+            context.updated_at = datetime.now(timezone.utc)
+            session.commit()
+
+
+def _record_recovery_outcome_if_enabled(settings, record_id: int | None, recovery_sync=None) -> None:
+    if record_id is None:
+        return
+    settings = settings or ServerSettings()
+    if settings is None or not settings.recovery_rag_enabled:
+        return
+    try:
+        from app.knowledge.case_service import RecoveryCaseService
+
+        case = RecoveryCaseService(
+            SessionLocal,
+            origin=settings.recovery_case_origin,
+        ).record_outcome(record_id)
+        if recovery_sync is not None and (
+            case.index_status == "pending" or case.aggregate_dirty
+        ):
+            recovery_sync.notify()
+    except Exception:  # noqa: BLE001 - knowledge is a derived side effect
+        logger.exception("RecoveryCase 记录失败 record_id=%s", record_id)
+
+
+def _has_recovery_sync_work() -> bool:
+    from app.storage.models import RecoveryCaseRecord
+
+    with SessionLocal() as session:
+        return session.query(RecoveryCaseRecord).filter(
+            RecoveryCaseRecord.record_status == "active",
+            (
+                (RecoveryCaseRecord.index_status.in_(("pending", "failed")))
+                | (RecoveryCaseRecord.aggregate_dirty.is_(True))
+            ),
+        ).first() is not None
+
+
+def _build_recovery_sync_coordinator(settings: ServerSettings):
+    if not settings.recovery_rag_enabled or not settings.recovery_auto_index_enabled:
+        return None
+    from app.knowledge.background import KnowledgeSyncCoordinator
+    from app.knowledge.embeddings import build_embedding_provider
+    from app.knowledge.indexer import RecoveryIndexer
+
+    indexer = RecoveryIndexer(
+        SessionLocal,
+        settings.recovery_index_path,
+        build_embedding_provider(settings),
+        origin=settings.recovery_case_origin,
+    )
+    return KnowledgeSyncCoordinator(
+        indexer.sync,
+        debounce_seconds=settings.recovery_index_debounce_seconds,
+        retry_seconds=settings.recovery_index_retry_seconds,
+        max_attempts=settings.recovery_index_max_attempts,
+    )
 
 
 if __name__ == "__main__":

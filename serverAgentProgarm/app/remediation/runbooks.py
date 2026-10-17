@@ -1,5 +1,8 @@
 """修复预案库。LLM 只能从这里选择并填参（Day 9），不能发明库外动作。"""
 from dataclasses import dataclass
+import os
+
+from app.tools.builtin import validate_service_name
 
 
 @dataclass(frozen=True)
@@ -38,3 +41,37 @@ RUNBOOKS: list[Runbook] = [
         risk_note="所有容器重启，MySQL 短暂不可用（约 10-30 秒）",
     ),
 ]
+
+
+def get_runbooks() -> list[Runbook]:
+    """返回默认预案和按目标服务器配置增加的服务重启预案。"""
+    result = list(RUNBOOKS)
+    existing = {runbook.name for runbook in result}
+    raw = os.getenv("RECOVERY_SERVICE_PORTS", "")
+    for item in raw.split(","):
+        if not item.strip() or ":" not in item:
+            continue
+        service, port_text = (part.strip() for part in item.split(":", 1))
+        try:
+            service = validate_service_name(service)
+            port = int(port_text)
+        except (TypeError, ValueError):
+            continue
+        name = f"{service}_restart"
+        if not 1 <= port <= 65535 or name in existing:
+            continue
+        result.append(Runbook(
+            name=name,
+            description=f"重启 {service} 服务",
+            trigger=f"适用于 {service} 服务 inactive/failed，或端口 {port} 不通的场景",
+            plan={"tool": "restart_service", "args": {"service": service}},
+            postcondition={"checks": [
+                {"tool": "get_service_status", "args": {"service": service},
+                 "expect": {"active": True}},
+                {"tool": "tcp_probe", "args": {"port": port},
+                 "expect": {"port_open": True}},
+            ]},
+            risk_note=f"重启 {service} 期间服务短暂不可用",
+        ))
+        existing.add(name)
+    return result

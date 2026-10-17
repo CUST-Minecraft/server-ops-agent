@@ -1,0 +1,81 @@
+{
+  "documents": [
+    {
+      "case_id": "case-nginx-inactive",
+      "source_incident_ids": [1001],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-inactive",
+      "service": "nginx",
+      "text": "nginx systemd service inactive and port 80 closed; HTTP requests failed; restarting nginx restored the listener and service active state"
+    },
+    {
+      "case_id": "case-docker-mysql",
+      "source_incident_ids": [1002],
+      "origin": "synthetic_eval",
+      "signature": "sig-docker-mysql",
+      "service": "docker",
+      "text": "docker daemon inactive; MySQL container became unreachable and TCP port 3306 refused connections; restarting docker restored MySQL connectivity"
+    },
+    {
+      "case_id": "case-redis-down",
+      "source_incident_ids": [1003],
+      "origin": "synthetic_eval",
+      "signature": "sig-redis-down",
+      "service": "redis",
+      "text": "redis service failed and port 6379 was not listening; restarting redis restored the cache service and TCP connectivity"
+    },
+    {
+      "case_id": "case-postgresql-refused",
+      "source_incident_ids": [1004],
+      "origin": "synthetic_eval",
+      "signature": "sig-postgresql-refused",
+      "service": "postgresql",
+      "text": "postgresql became inactive and clients received connection refused on port 5432; restarting postgresql restored the database listener"
+    },
+    {
+      "case_id": "case-ssh-down",
+      "source_incident_ids": [1005],
+      "origin": "synthetic_eval",
+      "signature": "sig-ssh-down",
+      "service": "ssh",
+      "text": "sshd inactive and TCP port 22 closed; remote login failed until the ssh service was restarted and the listener recovered"
+    },
+    {
+      "case_id": "case-nginx-upstream-502",
+      "source_incident_ids": [1006],
+      "origin": "synthetic_eval",
+      "signature": "sig-nginx-upstream-502",
+      "service": "nginx",
+      "text": "nginx remained active and port 80 was open, but reverse proxy requests returned 502 upstream connection errors after a backend restart"
+    },
+    {
+      "case_id": "case-rabbitmq-queue",
+      "source_incident_ids": [1007],
+      "origin": "synthetic_eval",
+      "signature": "sig-rabbitmq-queue",
+      "service": "rabbitmq",
+      "text": "rabbitmq service was active but queue consumers stopped acknowledging messages; restarting rabbitmq recovered consumer delivery"
+    },
+    {
+      "case_id": "case-elasticsearch-red",
+      "source_incident_ids": [1008],
+      "origin": "synthetic_eval",
+      "signature": "sig-elasticsearch-red",
+      "service": "elasticsearch",
+      "text": "elasticsearch cluster health turned red and search requests timed out; restarting the affected elasticsearch node restored search responses"
+    }
+  ],
+  "cases": [
+    {"query": "nginx inactive port 80 closed after restart", "service": "nginx", "expected_case_id": "case-nginx-inactive"},
+    {"query": "nginx 反向代理返回 502 但 nginx active", "service": "nginx", "expected_case_id": "case-nginx-upstream-502"},
+    {"query": "docker daemon down MySQL connection refused 3306", "service": "docker", "expected_case_id": "case-docker-mysql"},
+    {"query": "redis 未运行 6379 端口不通", "service": "redis", "expected_case_id": "case-redis-down"},
+    {"query": "Postgres connection refused on 5432", "service": "postgresql", "expected_case_id": "case-postgresql-refused"},
+    {"query": "sshd inactive port 22 login failure", "service": "ssh", "expected_case_id": "case-ssh-down"},
+    {"query": "RabbitMQ consumers stopped acknowledging messages", "service": "rabbitmq", "expected_case_id": "case-rabbitmq-queue"},
+    {"query": "Elasticsearch red cluster search timeout", "service": "elasticsearch", "expected_case_id": "case-elasticsearch-red"},
+    {"query": "Kafka partition rebalance", "service": "kafka", "expected_case_id": "missing"},
+    {"query": "TLS certificate expired on an ingress gateway", "service": null, "expected_case_id": "missing"},
+    {"query": "disk IO latency increased on a batch worker", "service": null, "expected_case_id": "missing"}
+  ]
+}
